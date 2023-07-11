@@ -1,0 +1,12 @@
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+ocpy/test.py
+log/
+test/
+sympy_test/
+test.ipynb
+*.db
+*.egg-info
+*.log
+*.pdf
