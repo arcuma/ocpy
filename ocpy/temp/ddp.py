@@ -664,7 +664,7 @@ class DDP:
 
 
     def forward_recursion(self, xs, us, ks, Ks, alpha=1.0):
-        """ backward pass of DDP.
+        """ forward pass of DDP.
         Args:
             xs (numpy.ndarray): nominal state trajectory.\
                 size must be (N+1)*n_u
@@ -676,6 +676,7 @@ class DDP:
         Returns:
             xs_new (numpy.ndarray): new state trajectory.
             us_new (numpy.ndarray): new control trajectory.
+            J_new (float): entire cost along with (xs_new, us_new)
         """
         N = self._N
         F = self._F_ufunc

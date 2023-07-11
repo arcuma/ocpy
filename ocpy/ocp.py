@@ -9,9 +9,10 @@ from ocpy.cost import SymCost, NumCost
 class OCP:
     """ Class that describes optimal control problem.
     """
-    def __init__(self, n_x: int, n_u: int):
+    def __init__(self, n_x: int, n_u: int, ocp_name: str):
         self._n_x = n_x
         self._n_u = n_u
+        self._ocp_name = ocp_name
         # state and input
         self._x = symutils.define_vector('x', n_x)
         self._u = symutils.define_vector('u', n_u)
@@ -25,7 +26,7 @@ class OCP:
         self._is_lambdified = False
 
     def define(self, f: sympy.Matrix, l: sympy.Symbol, lf: sympy.Symbol,
-               T: float, N: int, x0: np.ndarray, us_guess: np.ndarray,
+               T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
                is_continuous: bool=True, simplification: bool=False):
         """ Define optimal control problem. 
 
@@ -35,8 +36,9 @@ class OCP:
             lf (sympy.Symbol): Terminal cost
             T (float): Horizon length
             N (int): Discretization grid number.
+            t0 (float): Initial time.
             x0 (numpy.array): Initial state. size must be n_x.
-            us (numpy.array, optional): Guess of input trajectory. \
+            us_guess (numpy.array, optional): Guess of input trajectory. \
                 size must be (N * n_u).
             is_continuous (bool): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
@@ -58,6 +60,11 @@ class OCP:
             assert us_guess.shape == (N, n_u)
         else:
             us_guess = np.zeros((N, n_u))
+        # if l and lf are 1x1 Matrix, turn it into Symbol
+        if isinstance(l, sympy.Matrix):
+            l = l[0]
+        if isinstance(lf, sympy.Matrix):
+            lf = lf[0]
         # symbolic derivatives of dynamics and cost.
         if is_continuous:
             # discretize by Forward-Euler method.
@@ -79,6 +86,7 @@ class OCP:
         self._T = T
         self._N = N
         self._dt_value = T / N
+        self._t0 = t0
         self._x0 = x0
         self._us_guess = us_guess
         self._is_continuous = is_continuous
@@ -190,7 +198,7 @@ class OCP:
     def SetAllAtOnce(
             x: sympy.Matrix, u: sympy.Matrix, t:sympy.Symbol,  dt: sympy.Symbol, 
             f: sympy.Matrix, l: sympy.Symbol, lf: sympy.Symbol,
-            T: float, N: int, x0: np.ndarray, us_guess: np.ndarray,
+            T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
             scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
             is_continuous=True):
         """ Define optimal control problem. If symbolic constatnts are included, \
@@ -206,6 +214,7 @@ class OCP:
             lf (sympy.Symbol): Terminal cost
             T (float): Horizon length
             N (int): Discretization grid number.
+            t0 (float): Initial time.
             x0 (numpy.array): Initial state. size must be n_x.
             us (numpy.array, optional): Guess of input trajectory. \
                 size must be (N * n_u).
@@ -224,7 +233,7 @@ class OCP:
         ocp._scalar_dict = scalar_dict
         ocp._vector_dict = vector_dict
         ocp._matrix_dict = matrix_dict
-        ocp.define(f, l, lf, T, N, x0, us_guess, is_continuous)
+        ocp.define(f, l, lf, T, N, t0, x0, us_guess, is_continuous)
         return ocp
     
     @staticmethod
@@ -234,7 +243,7 @@ class OCP:
         from sympy import sin, cos
         n_x = 4
         n_u = 1
-        cartpole_ocp = OCP(n_x, n_u)
+        cartpole_ocp = OCP(n_x, n_u, 'cartpole')
         t = cartpole_ocp.get_t()
         x = cartpole_ocp.get_x()
         u = cartpole_ocp.get_u()
@@ -252,7 +261,7 @@ class OCP:
         Qf = sympy.diag(*q_f)
         R = sympy.diag(*r)
         # state equation
-        f = cartpole_ocp.get_f_empty()
+        f = cartpole_ocp.get_zeros(n_x, 1)
         f[0] = x[2]
         f[1] = x[3]
         f[2] = (u[0] + m_p*sin(x[1])*(l*x[1]*x[1] + g*cos(x[1]))) \
@@ -266,10 +275,14 @@ class OCP:
         T = 5.0
         N = 200
         # initial state and solution guess
+        t0 = 0.0
         x0 = np.array([0.0, 0.0, 0.0, 0.0])
         us_guess = np.zeros((N, n_u))
-        cartpole_ocp.define(f, l, lf, T, N, x0, us_guess, is_continuous=True)
+        cartpole_ocp.define(f, l, lf, T, N, t0, x0, us_guess, is_continuous=True)
         return cartpole_ocp
+
+    def get_ocp_name(self) -> str:
+        return self._ocp_name
 
     def get_x(self) -> sympy.Matrix:
         """ Returns sympy expression of x.
@@ -319,22 +332,41 @@ class OCP:
         return self._N
 
     def get_dt_value(self) -> float:
-        """ Returns number of discretization grids.
+        """ Returns value of dt (=T/N)
         """
         assert self._is_ocp_defined
         return self._dt_value
-    
-    def get_function_template(self) -> tuple:
-        """ Returns symbolic explessions of state function, \
-            stage cost and terminal cost. The size of f equals to n_x.
 
-        Returns:
-            (Matrix, Symbol, Symbol)
+    def get_t0(self) -> float:
+        """ Returns t0.
         """
-        f = symutils.define_vector('f', self._n_x)
-        l = sympy.Symbol('l')
-        lf = sympy.Symbol('lf')
-        return f, l, lf
+        assert self._is_ocp_defined
+        return self._t0
+    
+    def get_x0(self) -> np.ndarray:
+        """ Returns initial state x0.
+        """
+        assert self._is_ocp_defined
+        return self._x0
+
+    def get_us_guess(self) -> np.ndarray:
+        """ Returns initial guess of us.
+        """
+        assert self._is_ocp_defined
+        return self._us_guess
+    
+    @staticmethod
+    def get_zero():
+        """ Returns symbolic zero scalar 0. \
+            Use it for scalar such as cost function.
+        """
+        return sympy.Number(0)
+
+    @staticmethod
+    def get_zeros(m: int, n: int):
+        """ Returns symbolic zero Matrix O.
+        """
+        return sympy.zeros(m, n)
 
     def define_scalar_constant(self, constant_name: str, value: float):
         """

@@ -146,16 +146,8 @@ class Plotter:
             plt.show()
 
 
-    # def save(self):
-    #     plt.savefig(join(self._log_dir, 'result.pdf'),
-    #                 bbox_inches='tight', pad_inches=0.1)
-    #     print('Graphs are saved at ' + join(self._log_dir, 'result.pdf'))
-
-
-
-
 # test
-if True:
+if __file__ == '__main__':
     sim_name = 'lqr'
     log_dir = join(dirname(dirname(abspath(__file__))), 'log', sim_name)
     plotter = Plotter.from_log(log_dir, sim_name)

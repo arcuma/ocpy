@@ -10,7 +10,7 @@ from os.path import join
 class CartPoleAnimator:
     """ Class of generating animation of cartpole.
     """
-    def __init__(self, log_dir: str, sim_name: str):
+    def __init__(self, log_dir: str, sim_name: str='cartpole'):
         """ Constructor.
         
         Args:
@@ -101,7 +101,7 @@ class CartPoleAnimator:
             width=0.1,
             color='red',
             alpha=0.5
-        )
+            )
         # add shapes
         self._ax.add_patch(self._cart)
         self._ax.add_patch(self._ball)        
@@ -124,7 +124,7 @@ class CartPoleAnimator:
                 +r'$u$: '+f'{control[0]:.3f}\n',
             transform=self._ax.transAxes,
             fontsize=16
-        )
+            )
         anim = FuncAnimation(
             self._fig,
             self._update_animation,
@@ -197,13 +197,3 @@ if __name__ == '__main__':
     sim_name = 'cartpole'
     anim = CartPoleAnimator(log_dir, sim_name)
     anim.generate_animation(save=False)
-
-
-
-
-
-
-
-        
-        
-

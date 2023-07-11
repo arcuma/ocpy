@@ -2,7 +2,7 @@
 
 ## overview
 optimal control problem (OCP) solver implemented in Python.
-<!--
+
 ## Requirements
 - Python3
   - NumPy
@@ -15,6 +15,7 @@ optimal control problem (OCP) solver implemented in Python.
 lqr.ipynb (while this can be solved easily by DARE)
 cartpole.ipynb
 ```
+<!--
 https://github.com/arcuma/DDPython/assets/67198327/2d5275c7-c495-4531-97a7-f1c94822318e
 
 ## Note

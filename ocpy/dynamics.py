@@ -125,7 +125,7 @@ class NumDynamics:
         self.fxx_ufunc = fxx_ufunc
         self.fux_ufunc = fux_ufunc
         self.fuu_ufunc = fuu_ufunc
-        self.df = [f_ufunc, fx_ufunc, fu_ufunc, fxx_ufunc, fux_ufunc]
+        self.df = [f_ufunc, fx_ufunc, fu_ufunc, fxx_ufunc, fux_ufunc, fuu_ufunc]
         
     
     def get_derivatives(self):
