@@ -10,13 +10,12 @@ import seaborn as sns
 class Plotter:
     """ Class of plotting simulation results.
     """
-    def __init__(self, log_dir: str, sim_name: str, ts: np.ndarray,
+    def __init__(self, log_dir: str, ts: np.ndarray,
                  xs: np.ndarray, us: np.ndarray, J_hist: np.ndarray):
         """ Constrctor.
 
         Args:
             log_dir (str): Direcory in which graph will be saved.
-            sim_name (str): Simulation name.
             ts (np.ndarray): Discrete time history.
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
@@ -25,7 +24,6 @@ class Plotter:
         N = ts.size - 1        
         self._N = N        
         self._log_dir = log_dir
-        self._sim_name = sim_name
         self._ts = ts
         self._xs = xs if xs.ndim > 1 else xs.reshape((N + 1, 1))
         self._us = us if us.ndim > 1 else us.reshape((N, 1))
@@ -53,18 +51,17 @@ class Plotter:
     
 
     @staticmethod
-    def from_log(log_dir: str, sim_name: str=None):
+    def from_log(log_dir: str):
         """ Create instance from logs.
 
         Args:
             log_dir (str): Direcory in which logs are stored.
-            sim_name (str): Simulation name.
         """
         ts = np.genfromtxt(join(log_dir, 't_log.txt'))
         xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
         us = np.genfromtxt(join(log_dir, 'u_log.txt'))
         J_hist = np.genfromtxt(join(log_dir, 'J_log.txt'))
-        return Plotter(log_dir, sim_name, ts, xs, us, J_hist)
+        return Plotter(log_dir, ts, xs, us, J_hist)
 
     
     def plot(self, fig_scale=3, font_scale=1, wspace_scale=0.3, hspace_scale=2,
@@ -150,7 +147,7 @@ class Plotter:
 if __file__ == '__main__':
     sim_name = 'lqr'
     log_dir = join(dirname(dirname(abspath(__file__))), 'log', sim_name)
-    plotter = Plotter.from_log(log_dir, sim_name)
+    plotter = Plotter.from_log(log_dir)
     plotter.plot(save=True)
 
 

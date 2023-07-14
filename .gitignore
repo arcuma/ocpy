@@ -2,6 +2,7 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 ocpy/test.py
+rl_cartpole.ipynb
 log/
 test/
 sympy_test/
