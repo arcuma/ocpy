@@ -35,7 +35,6 @@ class SymCost:
         self.lfxx = lfxx
         self.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
 
-    
     @staticmethod
     def InitByManual(x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
                      l: sympy.Symbol, lx: sympy.Matrix, lu: sympy.Matrix,
@@ -67,14 +66,12 @@ class SymCost:
         symcost.lfxx = lfxx
         symcost.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
 
-
     def get_derivatives(self):
         """Get derivatives of dynamics.
             Returns:
                 dl (list): [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
         """
         return self.dl
-    
 
     def substitute_constatnts(self, dl_sym, dt=None, dt_value=None, 
                               scalar_dict=None, vector_dict=None, matrix_dict=None):
@@ -98,7 +95,6 @@ class SymCost:
             dl_sym, scalar_dict, vector_dict, matrix_dict
         )
         return self.df_subs
-
 
 class NumCost:
     """ Turn symbolic dynamics into fast universal function.
@@ -132,7 +128,6 @@ class NumCost:
         lfxx_ufunc = symutils.lambdify([x, t], lfxx_sym)
         self.dl = [l_ufunc, lx_ufunc, lu_ufunc, lxx_ufunc, lux_ufunc, luu_ufunc,
                    lf_ufunc, lfx_ufunc, lfxx_ufunc]
-
 
     def get_derivatives(self):
         """ Returns dynamics ufunction.

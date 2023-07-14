@@ -44,9 +44,9 @@ class SymDynamics:
             f (sympy.Matrix): Function of state equation.
             fx (sympy.Matrix): Derivative of f w.r.t. state x.
             fu (sympy.Matrix): Derivative of f w.r.t. input u.
-            fxx (sympy.Array): Derivative of f w.r.t. x and x
-            fux (sympy.Array): Derivative of f w.r.t. u and x
-            fux (sympy.Array): Derivative of f w.r.t. u and u
+            fxx (sympy.Array): Derivative of f w.r.t. x and x.
+            fux (sympy.Array): Derivative of f w.r.t. u and x.
+            fux (sympy.Array): Derivative of f w.r.t. u and u.
             continuous (bool): Is continous model.
         """
         assert f.shape == x.shape
@@ -60,7 +60,6 @@ class SymDynamics:
         symdyn.df = [f, fx, fu, fxx, fux, fuu]
         return symdyn
 
-
     def get_derivatives(self):
         """ Returns derivatives of dynamics.
 
@@ -68,7 +67,6 @@ class SymDynamics:
                 df (list):[f, fx, fu, fxx, fux, fuu]
         """
         return self.df
-    
 
     def substitute_constatnts(self, scalar_dict: dict=None, vector_dict: dict=None, 
                               matrix_dict: dict=None):
@@ -88,7 +86,6 @@ class SymDynamics:
             self.df, scalar_dict, vector_dict, matrix_dict
         )
         return self.df_subs
-
 
 class NumDynamics:
     """ Generate numerical function of dynamics from symbolic expression.
@@ -126,7 +123,6 @@ class NumDynamics:
         self.fux_ufunc = fux_ufunc
         self.fuu_ufunc = fuu_ufunc
         self.df = [f_ufunc, fx_ufunc, fu_ufunc, fxx_ufunc, fux_ufunc, fuu_ufunc]
-        
     
     def get_derivatives(self):
         """ Returns dynamics ufunction.

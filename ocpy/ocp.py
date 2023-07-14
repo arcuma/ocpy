@@ -13,7 +13,7 @@ class OCP:
         self._n_x = n_x
         self._n_u = n_u
         self._ocp_name = ocp_name
-        # state and input
+        # state and input (symbol)
         self._x = symutils.define_vector('x', n_x)
         self._u = symutils.define_vector('u', n_u)
         self._t = sympy.Symbol('t')
@@ -22,7 +22,31 @@ class OCP:
         self._scalar_dict = {}
         self._vector_dict = {}
         self._matrix_dict = {}
+        # flags
+        self._is_lambdified = False
+        # in define()
+        self._T = None
+        self._N = None
+        self._dt_value = None
+        self._t0 = None
+        self._x0 = None
+        self._us_guess = None
+        self._is_continuous = None
+        self._sym_dynamics = None
+        self._sym_cost = None
+        self._f_original = None
+        self._l_original = None
+        self._lf_original = None
+        self._df_sym = None
+        self._dl_sym = None
         self._is_ocp_defined = False
+        # in lambdify()
+        self._df_subs = None
+        self._dl_subs = None
+        self._num_dynamics = None
+        self._num_cost = None
+        self._df_ufunc = None
+        self._dl_ufunc = None
         self._is_lambdified = False
 
     def define(self, f: sympy.Matrix, l: sympy.Symbol, lf: sympy.Symbol,
@@ -51,9 +75,9 @@ class OCP:
         if x0 is not None:
             if not isinstance(x0, np.ndarray):
                 x0 = np.array(x0, dtype=float)
-                assert x0.shape[0] == n_x
+            assert x0.shape[0] == n_x
         else:
-            x0 = np.array(n_x)
+            x0 = np.zeros(n_x)
         if us_guess is not None:
             if not isinstance(us_guess, np.ndarray):
                 us_guess = np.array(us_guess, dtype=float)
@@ -82,7 +106,6 @@ class OCP:
             symutils.simplify(df_sym)
             symutils.simplify(dl_sym)
         # hold
-        self._is_ocp_defined = True
         self._T = T
         self._N = N
         self._dt_value = T / N
@@ -92,8 +115,12 @@ class OCP:
         self._is_continuous = is_continuous
         self._sym_dynamics = sym_dynamics
         self._sym_cost = sym_cost
+        self._f_original = f
+        self._l_original = l
+        self._lf_original = lf        
         self._df_sym = df_sym
         self._dl_sym = dl_sym
+        self._is_ocp_defined = True
         # generate ufunc
         self.lambdify()
 
@@ -123,13 +150,13 @@ class OCP:
         # l, lx, lu, lxx, lux, luu, lf, lfx, lfxx
         dl_ufunc = num_cost.get_derivatives()
         # hold
-        self._is_lambdified = True
         self._df_subs = df_subs
         self._dl_subs = dl_subs
-        self._df_ufunc = df_ufunc
-        self._dl_ufunc = dl_ufunc
         self._num_dynamics = num_dynamics
         self._num_cost = num_cost
+        self._df_ufunc = df_ufunc
+        self._dl_ufunc = dl_ufunc
+        self._is_lambdified = True
         # [f, fx, fu, fxx, fux, fuu], [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
         return df_ufunc, dl_ufunc
 
@@ -162,6 +189,27 @@ class OCP:
         """
         assert self._is_lambdified
         return self._df_ufunc, self._dl_ufunc
+    
+    def reset_parameters(self, t0: float, T: float, N: int,
+                         x0: np.ndarray, us_guess: np.ndarray):
+        """ reset parameters.
+
+        Args:
+            t0 (float):
+            T (float):
+            N (int):
+            x0 (np.ndarray):
+            us_guess (np.ndarray):
+        """
+        assert self._is_ocp_defined
+        self._t0 = float(t0)
+        self._T = float(T)
+        self._N = N
+        self._dt_value = T / N
+        self.reset_x0(x0)
+        self.reset_us_guess(us_guess)
+        # for dt_value being changed.
+        self.lambdify()
 
     def reset_x0(self, x0: np.ndarray | list) -> np.ndarray:
         """ reset x0. If list is given, transformed into ndarray.
@@ -169,12 +217,11 @@ class OCP:
         Args:
             x0 (numpy.ndarray): Initial state. size must be n_x.
         """
-        if x0 is not None:
-            if not isinstance(x0, np.ndarray):
-                x0 = np.array(x0, dtype=float)
-                assert x0.shape[0] == self._n_x
-        else:
-            x0 = np.array(self._n_x)
+        if x0 is None:
+            return
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array(x0, dtype=float)
+        assert x0.shape[0] == self._n_x
         self._x0 = x0
         return x0
 
@@ -185,12 +232,11 @@ class OCP:
             us (numpy.ndarray): Guess of input trajectory. \
                 Size must be (N * n_u).
         """
-        if us_guess is not None:
-            if not isinstance(us_guess, np.ndarray):
-                us_guess = np.array(us_guess, dtype=float)
-            assert us_guess.shape == (self._N, self._n_u)
-        else:
-            us_guess = np.zeros((self._N, self._n_u))
+        if us_guess is None:
+            return
+        if not isinstance(us_guess, np.ndarray):
+            us_guess = np.array(us_guess, dtype=float)
+        assert us_guess.shape == (self._N, self._n_u)
         self._us_guess = us_guess
         return us_guess
 
