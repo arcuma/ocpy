@@ -5,12 +5,12 @@ from ocpy import symutils
 
 
 class SymDynamics:
-    """ create Dynamics class. Derivatives are calculated via sympy.
+    """ Create Dynamics class. Derivatives are calculated via sympy.
     """
     
     def __init__(self, x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
                  f: sympy.Matrix):
-        """ create Dynamics class. Derivatives are calculated via sympy.
+        """ Create Dynamics class. Derivatives are calculated via sympy.
 
         Args:
             x (sympy.Matrix): State vector.
@@ -61,7 +61,7 @@ class SymDynamics:
         return symdyn
 
     def get_derivatives(self):
-        """ Returns derivatives of dynamics.
+        """ Return derivatives of dynamics.
 
             Returns:
                 df (list):[f, fx, fu, fxx, fux, fuu]
@@ -125,7 +125,7 @@ class NumDynamics:
         self.df = [f_ufunc, fx_ufunc, fu_ufunc, fxx_ufunc, fux_ufunc, fuu_ufunc]
     
     def get_derivatives(self):
-        """ Returns dynamics ufunction.
+        """ Return dynamics ufunction.
 
         Returns:
             df (list) : ufunc list of [f, fx, fu, fxx, fux, fuu], 
