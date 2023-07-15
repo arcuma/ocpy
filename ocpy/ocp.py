@@ -307,7 +307,7 @@ class OCP:
         Qf = sympy.diag(*q_f)
         R = sympy.diag(*r)
         # state equation
-        f = cartpole_ocp.get_zeros(n_x, 1)
+        f = cartpole_ocp.zero_vector(n_x)
         f[0] = x[2]
         f[1] = x[3]
         f[2] = (u[0] + m_p*sin(x[1])*(l*x[1]*x[1] + g*cos(x[1]))) \
@@ -402,15 +402,21 @@ class OCP:
         return self._us_guess
     
     @staticmethod
-    def get_zero():
-        """ Returns symbolic zero scalar 0. \
-            Use it for scalar such as cost function.
-        """
-        return sympy.Number(0)
+    def zero_vector(m: int) -> sympy.Matrix:
+        """ sympy m*1-size zero Matrix.
 
-    @staticmethod
-    def get_zeros(m: int, n: int):
-        """ Returns symbolic zero Matrix O.
+        Args:
+            m (int): dimension of vector.
+        """
+        return sympy.zeros(m, 1)
+
+    @staticmethod   
+    def zero_matrix(m: int, n: int) -> sympy.Matrix:
+        """ sympy m*n-size zero Matrix.
+
+        Args:
+            m (int): dimension of rows
+            n (int): dimension of columns
         """
         return sympy.zeros(m, n)
 

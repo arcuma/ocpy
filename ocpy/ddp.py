@@ -79,7 +79,9 @@ class DDPSolver(SolverBase):
         self._alphas = np.array([0.5**i for i in range(8)] + [0])
         self._damp_init = 1.0
         self._damp_min = 1e-5
-        self._damp_max = 1e5      
+        self._damp_max = 1e5
+        self._stop_threshold = 1e-3
+
         # functions derivatives.
         self._df, self._dl = ocp.get_derivatives()
         self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
@@ -111,7 +113,7 @@ class DDPSolver(SolverBase):
        
     def set_solver_parameters(self, max_iter: int=None, alphas: np.ndarray=None,
                               damp_init: float=None, damp_min: float=None, 
-                              damp_max: float=None):
+                              damp_max: float=None, stop_threshold: float=None):
         """ Set solver parameters.
 
         Args:
@@ -132,6 +134,8 @@ class DDPSolver(SolverBase):
             self._damp_min = damp_min
         if damp_max is not None:
             self._damp_max = damp_max
+        if stop_threshold is not None:
+            self._stop_threshold = stop_threshold
 
     def solve(self, result=True , log=False):
         """ Solve OCP via DDP iteration.
@@ -152,6 +156,7 @@ class DDPSolver(SolverBase):
         damp_init = self._damp_init
         damp_min = self._damp_min
         damp_max = self._damp_max
+        stop_threshold = self._stop_threshold
         t0 = self._t0
         x0 = self._x0
         us = self._us_guess
@@ -178,7 +183,7 @@ class DDPSolver(SolverBase):
                 fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, damp
             )
-            if np.abs(Delta_V) < 1e-5:
+            if np.abs(Delta_V) < stop_threshold:
                 is_success = True
                 break
             elif Delta_V > 0:
