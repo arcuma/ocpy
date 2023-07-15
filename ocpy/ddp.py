@@ -21,17 +21,17 @@ class SolverBase(abc.ABC):
         pass
 
     def ocp(self):
-        """ Returns OCP.
+        """ Return OCP.
         """
         return self._ocp
 
     def set_log_directory(self, log_dir: str):
-        """ set directory path of data are logged.
+        """ Set directory path of data are logged.
         """
         self._log_dir = log_dir
 
     def get_log_directory(self):
-        """ get directory path of data are logged.
+        """ Get directory path of data are logged.
         """
         return self._log_dir
 
@@ -55,7 +55,7 @@ class DDPSolver(SolverBase):
     """ Differential Dynamic Programming(DDP) solver.
     """
     def __init__(self, ocp: OCP):
-        """ set optimal control problem.
+        """ Set optimal control problem.
         """
         super().__init__(ocp)
         # OCP
@@ -89,12 +89,12 @@ class DDPSolver(SolverBase):
             self._lf, self._lfx, self._lfxx = self._dl
 
     def ocp(self):
-        """ Returns OCP.
+        """ Return OCP.
         """
         return self._ocp
 
     def get_log_directory(self):
-        """ Returns directory path where logs are saved.
+        """ Return directory path where logs are saved.
         """
         return self._log_dir
     
@@ -264,17 +264,17 @@ class DDPSolver(SolverBase):
             lxx (function):
             lux (function):
             luu (function):
-            xs (numpy.ndarray): nominal state trajectory.\
+            xs (numpy.ndarray): Nominal state trajectory.\
                 Size must be (N+1)*n_u.
-            us (numpy.ndarray): nominalcontrol trajectory.\
+            us (numpy.ndarray): Nominalcontrol trajectory.\
                 Size must be N*n_u.
             t0 (float): Initial time.
             dt (float): Discrete time step.
-            damp (float): damping coefficient.
+            damp (float): Damping coefficient.
         Returns:
-            ks (numpy.ndarray): series of k. Its size is N * n_u
-            Ks (numpy.ndarray): series of K. Its size is N * (n_u * n_x)
-            Delta_V (float): expecting change of value function at stage 0.
+            ks (numpy.ndarray): Series of k. Its size is N * n_u
+            Ks (numpy.ndarray): Series of K. Its size is N * (n_u * n_x)
+            Delta_V (float): Expecting change of value function at stage 0.
         """
         N = us.shape[0]
         T = N * dt
@@ -330,25 +330,25 @@ class DDPSolver(SolverBase):
     def forward_pass(self, f, l, lf, xs: np.ndarray, us: np.ndarray,
                      t0: float, dt: float,
                      ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
-        """ forward pass of DDP.
+        """ Forward pass of DDP.
         Args:
-            f (function): state function.
-            l (function): stage cost function.
-            lf (function): terminal cost function.
-            xs (numpy.ndarray): nominal state trajectory.\
+            f (function): State function.
+            l (function): Stage cost function.
+            lf (function): Terminal cost function.
+            xs (numpy.ndarray): Nominal state trajectory.\
                 size must be (N+1)*n_u
-            us (numpy.ndarray): nominal control trajectory.\
+            us (numpy.ndarray): Nominal control trajectory.\
                 size must be N*n_u
             t0 (float): Initial time.
             dt (float): Discrete time step.
-            ks (numpy.ndarray): series of k. Size must be N * n_u.
-            Ks (numpy.ndarray): series of K. Size must be N * (n_u * n_x).
-            alpha (float): step size of line search. 0<= alpha <= 1.0.
+            ks (numpy.ndarray): Series of k. Size must be N * n_u.
+            Ks (numpy.ndarray): Series of K. Size must be N * (n_u * n_x).
+            alpha (float): step Size of line search. 0<= alpha <= 1.0.
 
         Returns:
-            xs_new (numpy.ndarray): new state trajectory.
-            us_new (numpy.ndarray): new control trajectory.
-            J_new (float) cost along with (xs_new, us_new).
+            xs_new (numpy.ndarray): New state trajectory.
+            us_new (numpy.ndarray): New control trajectory.
+            J_new (float): Cost along with (xs_new, us_new).
         """
         N = us.shape[0]
         T = N * dt

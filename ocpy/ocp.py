@@ -161,7 +161,7 @@ class OCP:
         return df_ufunc, dl_ufunc
 
     def get_symbolic_derivatives(self) -> tuple[list, list]:
-        """ Returns symbolic derivatives of dynamics and costs.
+        """ Return symbolic derivatives of dynamics and costs.
 
         Returns:
             tuple: (df, dl) = ([f, fx, fu, fxx, fux, fuu], \
@@ -171,7 +171,7 @@ class OCP:
         return self._df_sym, self._dl_sym
     
     def get_symbolic_derivatives_substituted(self) -> tuple[list, list]:
-        """ Returns constants-substituted symbolic derivatives of dynamics and costs.
+        """ Return constants-substituted symbolic derivatives of dynamics and costs.
 
         Returns:
             tuple: (df, dl) = ([f, fx, fu, fxx, fux, fuu], \
@@ -181,7 +181,7 @@ class OCP:
         return self._df_subs, self._dl_subs
 
     def get_derivatives(self) -> tuple[list, list]:
-        """ Returns derivatives of dynamics and costs.
+        """ Return derivatives of dynamics and costs.
 
         Returns:
             tuple: (df, dl) = ([f, fx, fu, fxx, fux, fuu], \
@@ -195,11 +195,11 @@ class OCP:
         """ reset parameters.
 
         Args:
-            t0 (float):
-            T (float):
-            N (int):
-            x0 (np.ndarray):
-            us_guess (np.ndarray):
+            t0 (float): Initial time.
+            T (float): Horizon length.
+            N (int): Discretization grid.
+            x0 (np.ndarray): Initial state
+            us_guess (np.ndarray): Initial input guess.
         """
         assert self._is_ocp_defined
         self._t0 = float(t0)
@@ -212,7 +212,7 @@ class OCP:
         self.lambdify()
 
     def reset_x0(self, x0: np.ndarray | list) -> np.ndarray:
-        """ reset x0. If list is given, transformed into ndarray.
+        """ Reset x0. If list is given, transformed into ndarray.
 
         Args:
             x0 (numpy.ndarray): Initial state. size must be n_x.
@@ -226,10 +226,10 @@ class OCP:
         return x0
 
     def reset_us_guess(self, us_guess: np.ndarray | list) -> np.ndarray:
-        """ reset us_guess. If list is given, transformed into ndarray.
+        """ Reset us_guess. If list is given, transformed into ndarray.
 
         Args:
-            us (numpy.ndarray): Guess of input trajectory. \
+            us (numpy.ndarray): Initial guess of input trajectory. \
                 Size must be (N * n_u).
         """
         if us_guess is None:
@@ -259,7 +259,7 @@ class OCP:
             l (sympy.Symbol): Stage cost
             lf (sympy.Symbol): Terminal cost
             T (float): Horizon length
-            N (int): Discretization grid number.
+            N (int): Discretization grids.
             t0 (float): Initial time.
             x0 (numpy.array): Initial state. size must be n_x.
             us (numpy.array, optional): Guess of input trajectory. \
@@ -283,8 +283,8 @@ class OCP:
         return ocp
     
     @staticmethod
-    def SampleModelCartpole(simplification: bool=False):
-        """ Returns sample cartpole OCP.
+    def SampleOCPCartpole(simplification: bool=False):
+        """ Return sample cartpole OCP.
         """
         from sympy import sin, cos
         n_x = 4
@@ -331,72 +331,72 @@ class OCP:
         return self._ocp_name
 
     def get_x(self) -> sympy.Matrix:
-        """ Returns sympy expression of x.
+        """ Return sympy expression of x.
         """
         return self._x.copy()
 
     def get_u(self) -> sympy.Matrix:
-        """ Returns sympy expression of u.
+        """ Return sympy expression of u.
         """
         return self._u.copy()
     
     def get_t(self) -> sympy.Symbol:
-        """ Returns sympy symbol of t.
+        """ Return sympy symbol of t.
         """
         return self._t
     
     def get_dt(self) -> sympy.Symbol:
-        """ Returns sympy symbol of dt.
+        """ Return sympy symbol of dt.
         """
         return self._dt
 
     def get_n_x(self) -> int:
-        """ Returns dimension of x.
+        """ Return dimension of x.
         """
         return self._n_x
 
     def get_n_u(self) -> int:
-        """ Returns dimension of u.
+        """ Return dimension of u.
         """
         return self._n_u
     
     def get_f_empty(self):
-        """ Returns n_x*1-size symbolic zero vector.
+        """ Return n_x*1-size symbolic zero vector.
         """
         return sympy.zeros(self._n_x, 1)
     
     def get_T(self) -> float:
-        """ Returns horizon length.
+        """ Return horizon length.
         """
         assert self._is_ocp_defined
         return self._T
 
     def get_N(self) -> int:
-        """ Returns number of discretization grids.
+        """ Return number of discretization grids.
         """
         assert self._is_ocp_defined
         return self._N
 
     def get_dt_value(self) -> float:
-        """ Returns value of dt (=T/N)
+        """ Return value of dt (=T/N)
         """
         assert self._is_ocp_defined
         return self._dt_value
 
     def get_t0(self) -> float:
-        """ Returns t0.
+        """ Return t0.
         """
         assert self._is_ocp_defined
         return self._t0
     
     def get_x0(self) -> np.ndarray:
-        """ Returns initial state x0.
+        """ Return initial state x0.
         """
         assert self._is_ocp_defined
         return self._x0
 
     def get_us_guess(self) -> np.ndarray:
-        """ Returns initial guess of us.
+        """ Return initial guess of us.
         """
         assert self._is_ocp_defined
         return self._us_guess
@@ -406,7 +406,7 @@ class OCP:
         """ sympy m*1-size zero Matrix.
 
         Args:
-            m (int): dimension of vector.
+            m (int): Dimension of vector.
         """
         return sympy.zeros(m, 1)
 
@@ -423,8 +423,8 @@ class OCP:
     def define_scalar_constant(self, constant_name: str, value: float):
         """
         Args:
-            constant_name (str): 
-            value (float):
+            constant_name (str): Name of constant.
+            value (float): Constant value.
 
         Returns:
             scalar_symbol (sympy.Symbol) : sympy symbol of constant.
@@ -451,7 +451,7 @@ class OCP:
                                vector_value: np.ndarray | list):
         """
         Args:
-            constant_name (str): 
+            constant_name (str): Name of constant.
             vector_value (np.ndarray): 1d numpy array.
         Returns:
             vector_symbol (sympy.Matrix) : n*1-size sympy.Matrix
@@ -479,7 +479,7 @@ class OCP:
                                matrix_value: np.ndarray | list):
         """
         Args:
-            constant_name (str): 
+            constant_name (str): Name of constant.
             vector_value (np.ndarray): 2d numpy array.
 
         Returns:

@@ -5,15 +5,15 @@ from ocpy import symutils
 
 
 class SymCost:
-    """Symbolic Cost class.
+    """ Symbolic Cost class.
     """
     def __init__(self, x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
                  l: sympy.Symbol, lf: sympy.Symbol):    
         """Symbolic Cost class.
     
             Args:
-                x (sympy.Matrix): state vector.
-                u (sympy.Matrix): control input vector.
+                x (sympy.Matrix): State vector.
+                u (sympy.Matrix): Control input vector.
                 t (sympy.Symbol): Time.
                 l (sympy.Symbol): Stage cost.
                 lf (sympy.Symbol): Terminal cost.
@@ -42,18 +42,18 @@ class SymCost:
                      lf: sympy.Symbol, lfx: sympy.Matrix, lfxx: sympy.Matrix):
         """ Initialize dynamics derivatives manually.
         Args:
-            x (sympy.Matrix): state vector.
-            u (sympy.Matrix): control input vector.
+            x (sympy.Matrix): State vector.
+            u (sympy.Matrix): Control input vector.
             t (sympy.Symbol): Time.
-            l (sympy.Matrix): stage cost
-            lx (sympy.Symbol): derivative of l w.r.t. state x
-            lu (sympy.Symbol): derivative of l w.r.t. input u
-            lxx (sympy.Matrix): derivative of lx w.r.t. x.
-            lux (sympy.Matrix): derivative of lu w.r.t. x.
-            luu (sympy.Matrix): derivative of lu w.r.t. u.
-            lf (sympy.Matrix): terminal cost
-            lfx (sympy.Matrix): derivative of lf w.r.t. state x
-            lfxx (sympy.Matrix): derivative of lfx w.r.t. state x
+            l (sympy.Matrix): Stage cost
+            lx (sympy.Symbol): Derivative of l w.r.t. state x
+            lu (sympy.Symbol): Derivative of l w.r.t. input u
+            lxx (sympy.Matrix): Derivative of lx w.r.t. x.
+            lux (sympy.Matrix): Derivative of lu w.r.t. x.
+            luu (sympy.Matrix): Derivative of lu w.r.t. u.
+            lf (sympy.Matrix): Terminal cost
+            lfx (sympy.Matrix): Derivative of lf w.r.t. state x
+            lfxx (sympy.Matrix): Derivative of lfx w.r.t. state x
         """
         symcost = SymCost(x, u, t, sympy.zeros(1)[0], sympy.zeros(1)[0])
         symcost.l = l
@@ -67,7 +67,7 @@ class SymCost:
         symcost.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
 
     def get_derivatives(self):
-        """Get derivatives of dynamics.
+        """ Get derivatives of dynamics.
             Returns:
                 dl (list): [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
         """
@@ -79,16 +79,16 @@ class SymCost:
                 for numerical calculation.
 
         Args:
-            df_sym (list): derivatives of l,\
+            df_sym (list): Derivatives of l,\
                 [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx].
-            dt (Sympy.symbol): discretization 
-            dt_value (float): value of dt
+            dt (Sympy.symbol): Time discretization step
+            dt_value (float): Value of dt
             scalar_dict (dict): {"name": (symbol, value)}).
             vector_dict (dict): {"name": (symbol, value)}).
             matrix_dict (dict): {"name": (symbol, value)}).
 
         Returns:
-            dl_subs (list) : constants-substituted symbolic \
+            dl_subs (list) : Constants-substituted symbolic \
                 cost function derivatives.
         """
         self.df_subs = symutils.substitute_constants_list(
@@ -100,17 +100,17 @@ class NumCost:
     """ Turn symbolic dynamics into fast universal function.
 
     Args:
-        x (sympy.Matrix): state vector.
-        u (sympy.Matrix): control input vector.
-        l (sympy.Symbol): stage cost
-        lx (sympy.Matrix): derivative of l w.r.t. state x
-        lu (sympy.Matrix): derivative of l w.r.t. input u
-        lxx (sympy.Matrix): derivative of lx w.r.t. x.
-        lux (sympy.Matrix): derivative of lu w.r.t. x.
-        luu (sympy.Matrix): derivative of lu w.r.t. u.
-        lf (sympy.Matrix): terminal cost
-        lfx (sympy.Matrix): derivative of lf w.r.t. state x
-        lfxx (sympy.Matrix): derivative of lfx w.r.t. state x
+        x (sympy.Matrix): State vector.
+        u (sympy.Matrix): Control input vector.
+        l (sympy.Symbol): Stage cost
+        lx (sympy.Matrix): Derivative of l w.r.t. state x
+        lu (sympy.Matrix): Derivative of l w.r.t. input u
+        lxx (sympy.Matrix): Derivative of lx w.r.t. x.
+        lux (sympy.Matrix): Derivative of lu w.r.t. x.
+        luu (sympy.Matrix): Derivative of lu w.r.t. u.
+        lf (sympy.Matrix): Terminal cost
+        lfx (sympy.Matrix): Derivative of lf w.r.t. state x
+        lfxx (sympy.Matrix): Derivative of lfx w.r.t. state x
 
     Note:
         Confirm all constant symbolcs (e.g. Q, R,...) are substituted.
@@ -130,7 +130,7 @@ class NumCost:
                    lf_ufunc, lfx_ufunc, lfxx_ufunc]
 
     def get_derivatives(self):
-        """ Returns dynamics ufunction.
+        """ Return dynamics ufunction.
 
             Returns:
                 dl (list): ufunction list of 

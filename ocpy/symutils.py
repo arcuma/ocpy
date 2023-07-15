@@ -1,9 +1,9 @@
 """
-utility that helps symbolic matrix calculation.
+utility module that helps symbolic matrix calculation.
 """
 
 import sympy
-import numpy
+import numpy as np
 from sympy import ImmutableDenseNDimArray as Tensor
 import copy
 
@@ -24,15 +24,14 @@ def define_matrix(name: str, m: int, n: int) -> sympy.Matrix:
 
 
 def diff_scalar(f, x):
-    """ calculate derivative of  scalar function f w.r.t. x. \\
+    """ Calculate derivative of  scalar function f w.r.t. x. \\
         Args:
-            f (1 * 1 sympy.Matrix or sympy.Symbol) : scalar function 
-            x (n_x * 1 sympy.Matrix): vector variable
+            f (1 * 1 sympy.Matrix or sympy.Symbol) : Scalar function 
+            x (n_x * 1 sympy.Matrix): Vector variable
         
         Returns:
-            fx (n_x * 1 sympy.Matrix): derivative of f w.r.t. x.
+            fx (n_x * 1 sympy.Matrix): Derivative of f w.r.t. x.
     """
-
     if not isinstance(f, sympy.Matrix):
         f = sympy.Matrix([f])
     fx = f.jacobian(x).T
@@ -40,28 +39,28 @@ def diff_scalar(f, x):
 
 
 def diff_vector(f, x):
-    """ calculate derivative of  scalar function f w.r.t. x. \\
+    """ Calculate derivative of  scalar function f w.r.t. x. \\
         Args:
-            f (n_f * 1 sympy.Matrix) : vector function 
-            x (n_x * 1 sympy.Matrix): vector variable
+            f (n_f * 1 sympy.Matrix) : Vector function 
+            x (n_x * 1 sympy.Matrix): Vector variable
         
         Returns:
-            fx (n_x * n_x sympy.Matrix): derivative of f w.r.t. x.
+            fx (n_x * n_x sympy.Matrix): Derivative of f w.r.t. x.
     """
     return f.jacobian(x)
 
 
 def diff_matrix(M, x):
-    """ calculate derivative of matrix function M(x) , w.r.t. x. \\
+    """ Calculate derivative of matrix function M(x) , w.r.t. x. \\
         Args:
             M (m * n sympy.Matrix): Matrix function
-            x (n_x sympy.Matrix): a vector variable
+            x (n_x sympy.Matrix): Vector variable
         
         Returns:
-            M_x (n_x * m * n): derivative of M w.r.t. x, a 3 order tensor Mx.
+            M_x (n_x * m * n): Derivative of M w.r.t. x, a 3 order tensor Mx.
             
         Note : 
-            Mx is sympy.MutableDenseNDimArray and 
+            Mx is sympy.MutableDenseNDimArray and \
             no longer a sympy.matrices.dense.MutableDenseMatrix
     """
     n_x = x.shape[0]
@@ -72,10 +71,10 @@ def diff_matrix(M, x):
 def vector_dot_tensor_1(v, T):
     """ Tensor product between vector v and 3th tensor T, contraction with 1st axis.
         Args:
-            v (m * 1 sympy Matrix): vector. Correspond to jacobian of V
+            v (m * 1 sympy Matrix): Vector. Correspond to jacobian of V
             T (l * m * n sympy Array): 3rd tensor T. Correspond to Hessian of f
         Returns:
-            M (l * n sympy Matrix) : output matrix.
+            M (l * n sympy Matrix) : Output matrix.
     """
     assert len(v) == T.shape[1]
     l, m, n = T.shape
@@ -106,15 +105,15 @@ def substitute_constants(
     """ Substitute constants such as mass, length, costfunction coefs etc..
 
     Args:
-        f (sympy) : symbolic function
-        scalar_dict (dict, {"name": (symbol, value)}) : scalar constants
-        vector_dict (dict, {"name": (symbol, value)}) : vector constants
-        matrix_dict (dict, {"name": (symbol, value)}) : matrix constants
-        dt (sympy.Symobl): discretization step.
-        dt_value (float): value of dt.
+        f (sympy) : Symbolic function.
+        scalar_dict (dict, {"name": (symbol, value)}) : Scalar constants
+        vector_dict (dict, {"name": (symbol, value)}) : Vector constants
+        matrix_dict (dict, {"name": (symbol, value)}) : Matrix constants
+        dt (sympy.Symobl): Time discretization step.
+        dt_value (float): Value of dt.
         
     Returns:
-        f_subs : function f in which constatnts are substituted.
+        f_subs : Function f in which constatnts are substituted.
     """
     f_subs = copy.copy(f)
     if scalar_dict is not None:
@@ -145,13 +144,13 @@ def substitute_constants_list(
     """ Substitute constants such as mass, length, costfunction coefs etc.
     Args:
         func_list (list) : list of symbolic function
-        scalar_dict (dict, {"name": (symbol, value)}) : scalar constants
-        vector_dict (dict, {"name": (symbol, value)}) : vector constants
-        matrix_dict (dict, {"name": (symbol, value)}) : matrix constants
+        scalar_dict (dict, {"name": (symbol, value)}) : Scalar constants
+        vector_dict (dict, {"name": (symbol, value)}) : Vector constants
+        matrix_dict (dict, {"name": (symbol, value)}) : Matrix constants
         dt (sympy.Symobl): discretization step.
         dt_value (float): value of dt.
     Returns:
-        f_subs : function f in which constatnts are substituted.
+        f_subs : Function f in which constatnts are substituted.
     """
     functions_subs = []
     for f in func_list:
@@ -160,38 +159,41 @@ def substitute_constants_list(
     return functions_subs
 
 
-def lambdify(args: list, f: sympy.Symbol | sympy.Matrix | sympy.Array):
+def lambdify(args: list, f: sympy.Symbol | sympy.Matrix | sympy.Array,
+             dim_reduction=True):
     """ call sympy.lambdify to transform funciton into fast numpy ufunc.
         Args:
-            args (list) : arguments of function f. 
+            args (list) : Arguments of function f. 
                 If f = f(x, y, z),  args=[x, y, z].
-            f (sympy symbol or matrix) : function.
+            f (sympy symbol or matrix) : Function.
+            dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transform \
+                into 1d ndarray.
         Returns:
             f_ufunc : numpy ufunc.
     """
     if isinstance(f, sympy.Matrix):
         m, n = f.shape
         # convert into 1d array
-        if m == 1 or n == 1:
+        if (m == 1 or n == 1) and dim_reduction:
             if n == 1:
                 f = f.T
             f = sympy.Array(f)[0]
             f = sympy.lambdify(args, f, "numpy")
             # unless this operation, f_ufunc returns list, not ndarray. 
-            f_ufunc = lambda *args: numpy.array(f(*args))
+            f_ufunc = lambda *args: np.array(f(*args))
             return f_ufunc
     elif isinstance(f, sympy.Array):
         f = sympy.lambdify(args, f, "numpy")
-        f_ufunc = lambda *args: numpy.array(f(*args))
+        f_ufunc = lambda *args: np.array(f(*args))
         return f_ufunc
     f_ufunc = sympy.lambdify(args, f, "numpy")
     return f_ufunc
 
 
 def lambdify_list(args: list, f_list: list):
-    """ call sympy.lambdify to transform funciton into fast numpy ufunc.
+    """ Call sympy.lambdify to transform funciton into fast numpy ufunc.
         Args:
-            args (list) : arguments of function f. 
+            args (list) : Arguments of function f. \
                 If f = f(x, y, z),  args are [x, y, z].
             f_list (list (sympy symbol or matrix)) : list of functions.
         Returns:
