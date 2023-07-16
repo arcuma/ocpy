@@ -7,6 +7,7 @@ rl_cartpole.ipynb
 log/
 test/
 sympy_test/
+cartpole_copy.ipynb
 test.ipynb
 *.db
 *.egg-info
