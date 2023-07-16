@@ -1,4 +1,4 @@
-import sympy
+import sympy as sym
 import numpy as np
 
 from ocpy import symutils
@@ -16,8 +16,8 @@ class OCP:
         # state and input (symbol)
         self._x = symutils.define_vector('x', n_x)
         self._u = symutils.define_vector('u', n_u)
-        self._t = sympy.Symbol('t')
-        self._dt = sympy.Symbol('dt')
+        self._t = sym.Symbol('t')
+        self._dt = sym.Symbol('dt')
         # dictionary holding symbols and values of constants
         self._scalar_dict = {}
         self._vector_dict = {}
@@ -49,15 +49,15 @@ class OCP:
         self._dl_ufunc = None
         self._is_lambdified = False
 
-    def define(self, f: sympy.Matrix, l: sympy.Symbol, lf: sympy.Symbol,
+    def define(self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
                T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
                is_continuous: bool=True, simplification: bool=False):
         """ Define optimal control problem. 
 
         Args:
-            f (sympy.Matrix): State function
-            l (sympy.Symbol): Stage cost
-            lf (sympy.Symbol): Terminal cost
+            f (sym.Matrix): State function
+            l (sym.Symbol): Stage cost
+            lf (sym.Symbol): Terminal cost
             T (float): Horizon length
             N (int): Discretization grid number.
             t0 (float): Initial time.
@@ -85,9 +85,9 @@ class OCP:
         else:
             us_guess = np.zeros((N, n_u))
         # if l and lf are 1x1 Matrix, turn it into Symbol
-        if isinstance(l, sympy.Matrix):
+        if isinstance(l, sym.Matrix):
             l = l[0]
-        if isinstance(lf, sympy.Matrix):
+        if isinstance(lf, sym.Matrix):
             lf = lf[0]
         # symbolic derivatives of dynamics and cost.
         if is_continuous:
@@ -125,7 +125,7 @@ class OCP:
         self.lambdify()
 
     def lambdify(self) -> tuple[list, list]:
-        """ Generate sympy symbolic expression into numpy function.\
+        """ Generate sym symbolic expression into numpy function.\
         Confirm
         
         Args:
@@ -242,8 +242,8 @@ class OCP:
 
     @staticmethod
     def SetAllAtOnce(
-            x: sympy.Matrix, u: sympy.Matrix, t:sympy.Symbol,  dt: sympy.Symbol, 
-            f: sympy.Matrix, l: sympy.Symbol, lf: sympy.Symbol,
+            x: sym.Matrix, u: sym.Matrix, t:sym.Symbol,  dt: sym.Symbol, 
+            f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
             scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
             is_continuous=True):
@@ -251,13 +251,13 @@ class OCP:
             pass them as dict{name: (symbol, value)} for substitution.
 
         Args:
-            x (sympy.Matrix): State vector.
-            u (sympy.Matrix): Control input vector.
-            t (sympy.Symbol): Time.
-            dt (sympy.Symbol): Time discretization step. Its value is T/N.  
-            f (sympy.Matrix): State function
-            l (sympy.Symbol): Stage cost
-            lf (sympy.Symbol): Terminal cost
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
+            t (sym.Symbol): Time.
+            dt (sym.Symbol): Time discretization step. Its value is T/N.  
+            f (sym.Matrix): State function
+            l (sym.Symbol): Stage cost
+            lf (sym.Symbol): Terminal cost
             T (float): Horizon length
             N (int): Discretization grids.
             t0 (float): Initial time.
@@ -303,9 +303,9 @@ class OCP:
         q_f = cartpole_ocp.define_vector_constant('q_f', [2.5, 10, 0.01, 0.01])
         x_ref = cartpole_ocp.define_vector_constant('x_ref', [0, np.pi, 0, 0])
         # diagonal weight    
-        Q = sympy.diag(*q)
-        Qf = sympy.diag(*q_f)
-        R = sympy.diag(*r)
+        Q = sym.diag(*q)
+        Qf = sym.diag(*q_f)
+        R = sym.diag(*r)
         # state equation
         f = cartpole_ocp.zero_vector(n_x)
         f[0] = x[2]
@@ -330,23 +330,23 @@ class OCP:
     def get_ocp_name(self) -> str:
         return self._ocp_name
 
-    def get_x(self) -> sympy.Matrix:
-        """ Return sympy expression of x.
+    def get_x(self) -> sym.Matrix:
+        """ Return sym expression of x.
         """
         return self._x.copy()
 
-    def get_u(self) -> sympy.Matrix:
-        """ Return sympy expression of u.
+    def get_u(self) -> sym.Matrix:
+        """ Return sym expression of u.
         """
         return self._u.copy()
     
-    def get_t(self) -> sympy.Symbol:
-        """ Return sympy symbol of t.
+    def get_t(self) -> sym.Symbol:
+        """ Return sym symbol of t.
         """
         return self._t
     
-    def get_dt(self) -> sympy.Symbol:
-        """ Return sympy symbol of dt.
+    def get_dt(self) -> sym.Symbol:
+        """ Return sym symbol of dt.
         """
         return self._dt
 
@@ -363,7 +363,7 @@ class OCP:
     def get_f_empty(self):
         """ Return n_x*1-size symbolic zero vector.
         """
-        return sympy.zeros(self._n_x, 1)
+        return sym.zeros(self._n_x, 1)
     
     def get_T(self) -> float:
         """ Return horizon length.
@@ -402,23 +402,23 @@ class OCP:
         return self._us_guess
     
     @staticmethod
-    def zero_vector(m: int) -> sympy.Matrix:
-        """ sympy m*1-size zero Matrix.
+    def zero_vector(m: int) -> sym.Matrix:
+        """ sym m*1-size zero Matrix.
 
         Args:
             m (int): Dimension of vector.
         """
-        return sympy.zeros(m, 1)
+        return sym.zeros(m, 1)
 
     @staticmethod   
-    def zero_matrix(m: int, n: int) -> sympy.Matrix:
-        """ sympy m*n-size zero Matrix.
+    def zero_matrix(m: int, n: int) -> sym.Matrix:
+        """ sym m*n-size zero Matrix.
 
         Args:
             m (int): dimension of rows
             n (int): dimension of columns
         """
-        return sympy.zeros(m, n)
+        return sym.zeros(m, n)
 
     def define_scalar_constant(self, constant_name: str, value: float):
         """
@@ -427,9 +427,9 @@ class OCP:
             value (float): Constant value.
 
         Returns:
-            scalar_symbol (sympy.Symbol) : sympy symbol of constant.
+            scalar_symbol (sym.Symbol) : sympy symbol of constant.
         """
-        scalar_symbol = sympy.Symbol(constant_name)
+        scalar_symbol = sym.Symbol(constant_name)
         self._scalar_dict[constant_name] = (scalar_symbol, value)
         return scalar_symbol
 
@@ -454,7 +454,7 @@ class OCP:
             constant_name (str): Name of constant.
             vector_value (np.ndarray): 1d numpy array.
         Returns:
-            vector_symbol (sympy.Matrix) : n*1-size sympy.Matrix
+            vector_symbol (sym.Matrix) : n*1-size sympy.Matrix
         """
         if type(vector_value) == list:
             vector_value = np.array(vector_value)
@@ -467,7 +467,7 @@ class OCP:
         Args:
             constant_list (list): list of tuple('name', value)
         Returns:
-            vector_symbols (list) : list[sympy.Matrix]. list of vector symbols.
+            vector_symbols (list) : list[sym.Matrix]. list of vector symbols.
         """
         vec_symbols = []
         for name, value in constant_list:
@@ -483,7 +483,7 @@ class OCP:
             vector_value (np.ndarray): 2d numpy array.
 
         Returns:
-            matrix_symbol (sympy.Matrix) : m*n-size sympy.Matrix
+            matrix_symbol (sym.Matrix) : m*n-size sympy.Matrix
         """
         if isinstance(matrix_value, list):
             matrix_value = np.array(matrix_value)
@@ -497,7 +497,7 @@ class OCP:
             constant_list (list): list of tuple('name', value)
 
         Returns:
-            matrix_symbols (list) : list[sympy.Matrix]. list of Matrix symbols.
+            matrix_symbols (list) : list[sym.Matrix]. list of Matrix symbols.
         """
         matrix_symbols = []
         for name, value in constant_list:

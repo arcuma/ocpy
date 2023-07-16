@@ -149,7 +149,6 @@ class DDPSolver(SolverBase):
             xs (numpy.ndarray): optimal state trajectory. (N * n_x)
             us (numpy.ndarray): optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): costs at each iteration.
-
         """
         max_iter = self._max_iter
         alphas = self._alphas
@@ -172,7 +171,8 @@ class DDPSolver(SolverBase):
         time_start = time.perf_counter()
         # initial rollout
         xs, J = self.rollout(f, l, lf, x0, us, t0, dt)
-        Js = [J]
+        Js = np.zeros(max_iter + 1, dtype=float)
+        Js[0] = J
         # dumping coefficient of C-Newton.
         damp = damp_init
         # main iteration
@@ -183,13 +183,15 @@ class DDPSolver(SolverBase):
                 fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, damp
             )
+            print('DeltaV: ',Delta_V)            
             if np.abs(Delta_V) < stop_threshold:
                 is_success = True
                 break
             elif Delta_V > 0:
+                # it's no use line searching
                 damp *= 10.0
+                Js[iter + 1] = J
                 continue
-            print('DeltaV: ',Delta_V)
             # forward pass in line search 
             for alpha in alphas:
                 xs_new, us_new, J_new = self.forward_pass(
@@ -207,9 +209,9 @@ class DDPSolver(SolverBase):
                 # line search failed
                 damp *= 2.0
                 damp = min(max(damp, damp_min), damp_max)
-            Js.append(J)
+            Js[iter + 1] = J
         ts = np.array([i*self._dt for i in range(N + 1)])
-        Js = np.array(Js)
+        Js = Js[0:iter + 1]
         # computational time
         time_end = time.perf_counter()
         time_elapsed = time_end - time_start
@@ -252,7 +254,8 @@ class DDPSolver(SolverBase):
                       lx, lu, lxx, lux, luu, lfx, lfxx,
                       xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
                       damp: float=1e-6):
-        """ backward pass of DDP.
+        """ Backward pass of DDP.
+
         Args:
             fx (function):
             fu (function):
@@ -271,6 +274,7 @@ class DDPSolver(SolverBase):
             t0 (float): Initial time.
             dt (float): Discrete time step.
             damp (float): Damping coefficient.
+
         Returns:
             ks (numpy.ndarray): Series of k. Its size is N * n_u
             Ks (numpy.ndarray): Series of K. Its size is N * (n_u * n_x)
@@ -331,6 +335,7 @@ class DDPSolver(SolverBase):
                      t0: float, dt: float,
                      ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
         """ Forward pass of DDP.
+
         Args:
             f (function): State function.
             l (function): Stage cost function.
