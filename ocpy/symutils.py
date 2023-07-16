@@ -5,6 +5,7 @@ utility module that helps symbolic matrix calculation.
 import sympy as sym
 import numpy as np
 from sympy import ImmutableDenseNDimArray as Tensor
+from numba import njit
 import copy
 
 
@@ -113,6 +114,19 @@ def vector_dot_tensor_1(v, T):
     return M.T
 
 
+@njit
+def dot_vector_tensor(v: np.ndarray, T: np.ndarray):
+    """ Tensor contraction between 1d and 3d.
+    """
+    l, m, n = T.shape
+    M = np.zeros((l, n))
+    for i in range(l):
+        for j in range(m):
+            for k in range(n):
+                M[i][k] += v[j] * T[i][j][k]
+    return M
+
+
 def simplify(f: sym.Symbol | list[sym.Symbol]):
     """ Simplify symbolic expression.
 
@@ -190,7 +204,7 @@ def substitute_constants_list(
 
 
 def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
-             dim_reduction=True):
+             dim_reduction=True, numba_njit=True):
     """ call sym.lambdify to transform funciton into fast numpy ufunc.
 
     Args:
@@ -203,23 +217,54 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
     Returns:
         f_ufunc : numpy ufunc.
     """
-    if isinstance(f, sym.Matrix):
-        m, n = f.shape
-        # convert into 1d array
-        if (m == 1 or n == 1) and dim_reduction:
-            if n == 1:
-                f = f.T
-            f = sym.Array(f)[0]
+    if numba_njit:
+        if isinstance(f, sym.Matrix):
+            m, n = f.shape
+            # needed for numba knowing datatype is float.
+            f += 1e-128*np.ones((m, n))
+            # convert into 1d array
+            if (m == 1 or n == 1) and dim_reduction:
+                if n == 1:
+                    f = f.T
+                f = sym.Array(f)[0]
+                f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
+                return f_list_njit
+                # # unless this operation, f_ufunc returns list, not ndarray. 
+                # f_numpy = lambda *args: np.array(f_list_njit(*args))
+                # return njit(f_numpy)
+        elif isinstance(f, sym.Array):
+            l, m, n = f.shape
+            f = sym.MutableDenseNDimArray(f)
+            # needed for numba knowing datatype is float.
+            # for i in range(l):
+            #     for j in range(m):
+            #         for k in range(n):
+            #             f[i, j, k] += 1e-128
+            f += 1e-128 * np.ones((l, m, n))
+            f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
+            # for 3D array, this operation is needed turning into ndarray.
+            f_numpy = lambda *args: np.array(f_list_njit(*args))
+            return njit(f_numpy)
+        f_numpy = sym.lambdify(args, f, modules='numpy')
+        return njit(f_numpy)
+    else:
+        if isinstance(f, sym.Matrix):
+            m, n = f.shape
+            # convert into 1d array
+            if (m == 1 or n == 1) and dim_reduction:
+                if n == 1:
+                    f = f.T
+                f = sym.Array(f)[0]
+                f = sym.lambdify(args, f, "numpy")
+                # unless this operation, f_ufunc returns list, not ndarray. 
+                f_ufunc = lambda *args: np.array(f(*args))
+                return f_ufunc
+        elif isinstance(f, sym.Array):
             f = sym.lambdify(args, f, "numpy")
-            # unless this operation, f_ufunc returns list, not ndarray. 
             f_ufunc = lambda *args: np.array(f(*args))
             return f_ufunc
-    elif isinstance(f, sym.Array):
-        f = sym.lambdify(args, f, "numpy")
-        f_ufunc = lambda *args: np.array(f(*args))
+        f_ufunc = sym.lambdify(args, f, "numpy")
         return f_ufunc
-    f_ufunc = sym.lambdify(args, f, "numpy")
-    return f_ufunc
 
 
 def lambdify_list(args: list, f_list: list):
