@@ -93,7 +93,7 @@ def diff_matrix_2(M: sym.Matrix, x: sym.Matrix) -> sym.Array:
     return sym.ImmutableDenseNDimArray(Mx)
 
 
-def vector_dot_tensor_1(v, T):
+def vector_dot_tensor_sym(v, T):
     """ Tensor product between vector v and 3th tensor T, \
         contraction with 2nd axis.
     Args:
@@ -115,7 +115,7 @@ def vector_dot_tensor_1(v, T):
 
 
 @njit
-def dot_vector_tensor(v: np.ndarray, T: np.ndarray):
+def vector_dot_tensor(v: np.ndarray, T: np.ndarray):
     """ Tensor contraction between 1d and 3d.
     """
     l, m, n = T.shape

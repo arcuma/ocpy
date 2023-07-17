@@ -217,8 +217,7 @@ class OCP:
         """
         if x0 is None:
             return
-        if not isinstance(x0, np.ndarray):
-            x0 = np.array(x0, dtype=float)
+        x0 = np.array(x0, dtype=float)
         assert x0.shape[0] == self._n_x
         self._x0 = x0
         return x0
@@ -232,8 +231,7 @@ class OCP:
         """
         if us_guess is None:
             return
-        if not isinstance(us_guess, np.ndarray):
-            us_guess = np.array(us_guess, dtype=float)
+        us_guess = np.array(us_guess, dtype=float)
         assert us_guess.shape == (self._N, self._n_u)
         self._us_guess = us_guess
         return us_guess
