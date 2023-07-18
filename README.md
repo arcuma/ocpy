@@ -1,12 +1,13 @@
 # ocpy
 
 ## overview
-optimal control problem (OCP) solver implemented in Python.
+Optimal control problem (OCP) solver implemented in Python.
 
 ## Requirements
 - Python3
   - NumPy
   - SymPy
+  - Numba
   - Matplotlib
   - seaborn
 
@@ -14,6 +15,7 @@ optimal control problem (OCP) solver implemented in Python.
 ```txt
 lqr.ipynb (while this can be solved easily by DARE)
 cartpole.ipynb
+hexacopter.ipynb
 
 ```
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46

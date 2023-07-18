@@ -73,14 +73,12 @@ class OCP:
         n_x, n_u = self._n_x, self._n_u
         # turn x0 and us_guess into ndarray if not.
         if x0 is not None:
-            if not isinstance(x0, np.ndarray):
-                x0 = np.array(x0, dtype=float)
+            x0 = np.array(x0, dtype=float)
             assert x0.shape[0] == n_x
         else:
             x0 = np.zeros(n_x)
         if us_guess is not None:
-            if not isinstance(us_guess, np.ndarray):
-                us_guess = np.array(us_guess, dtype=float)
+            us_guess = np.array(us_guess, dtype=float)
             assert us_guess.shape == (N, n_u)
         else:
             us_guess = np.zeros((N, n_u))
@@ -219,8 +217,7 @@ class OCP:
         """
         if x0 is None:
             return
-        if not isinstance(x0, np.ndarray):
-            x0 = np.array(x0, dtype=float)
+        x0 = np.array(x0, dtype=float)
         assert x0.shape[0] == self._n_x
         self._x0 = x0
         return x0
@@ -234,8 +231,7 @@ class OCP:
         """
         if us_guess is None:
             return
-        if not isinstance(us_guess, np.ndarray):
-            us_guess = np.array(us_guess, dtype=float)
+        us_guess = np.array(us_guess, dtype=float)
         assert us_guess.shape == (self._N, self._n_u)
         self._us_guess = us_guess
         return us_guess
@@ -286,7 +282,7 @@ class OCP:
     def SampleOCPCartpole(simplification: bool=False):
         """ Return sample cartpole OCP.
         """
-        from sympy import sin, cos
+        from sympy import sin, cos, ln
         n_x = 4
         n_u = 1
         cartpole_ocp = OCP(n_x, n_u, 'cartpole')
@@ -294,7 +290,7 @@ class OCP:
         x = cartpole_ocp.get_x()
         u = cartpole_ocp.get_u()
         # define constants
-        m_c, m_p, l, g, u__min, u_max, u_eps \
+        m_c, m_p, l, g, u_min, u_max, u_eps \
             = cartpole_ocp.define_scalar_constants(
                 [('m_c', 2), ('m_p', 0.1), ('l', 0.5), ('g', 9.80665), 
                 ('u_min', -20),  ('u_max', 20), ('u_eps', 0.001)])
@@ -314,6 +310,9 @@ class OCP:
                 /( m_c+m_p*sin(x[1])*sin(x[1]))
         f[3] = (-u[0] * cos(x[1]) - m_p*l*x[1]*x[1]*cos(x[1])*sin(x[1]) 
                 - (m_c+m_p)*g*sin(x[1])) / ( l*(m_c + m_p*sin(x[1])*sin(x[1])))
+        # barrier function for inequality constraints.
+        u_barrier = sum(-ln(u[i] - u_min) - ln(u_max - u[i]) for i in range(n_u)) \
+            * 1e-5
         # cost function
         l = (x - x_ref).T * Q * (x - x_ref) + u.T * R * u
         lf = (x - x_ref).T * Qf * (x - x_ref)

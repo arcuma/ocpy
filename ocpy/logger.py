@@ -43,6 +43,6 @@ class Logger:
         with open(join(log_dir, 'J_log.txt'), mode='w') as J_log:
             np.savetxt(J_log, J_hist)
         
-        print("Data are saved at " + log_dir, ".")
+        print("Data are saved at " + log_dir)
         return log_dir
         
