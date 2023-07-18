@@ -92,6 +92,14 @@ def diff_matrix_2(M: sym.Matrix, x: sym.Matrix) -> sym.Array:
                 Mx[i, j, k] = sym.diff(M[i, j], x[k])
     return sym.ImmutableDenseNDimArray(Mx)
 
+def diag(v: sym.Matrix):
+    """ Transform vector into diagonal matrix.
+
+    Args:
+        v(sym.Matrix): Symbolic vector.
+    """
+    return sym.diag(*v)
+
 
 def vector_dot_tensor_sym(v, T):
     """ Tensor product between vector v and 3th tensor T, \
