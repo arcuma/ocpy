@@ -190,7 +190,7 @@ class OCP:
     
     def reset_parameters(self, t0: float, T: float, N: int,
                          x0: np.ndarray, us_guess: np.ndarray):
-        """ reset parameters.
+        """ Reset parameters.
 
         Args:
             t0 (float): Initial time.
@@ -311,10 +311,11 @@ class OCP:
         f[3] = (-u[0] * cos(x[1]) - m_p*l*x[1]*x[1]*cos(x[1])*sin(x[1]) 
                 - (m_c+m_p)*g*sin(x[1])) / ( l*(m_c + m_p*sin(x[1])*sin(x[1])))
         # barrier function for inequality constraints.
-        u_barrier = sum(-ln(u[i] - u_min) - ln(u_max - u[i]) for i in range(n_u)) \
-            * 1e-5
+        u_barrier = sym.Matrix([
+            sum(-ln(u[i] - u_min) - ln(u_max - u[i]) for i in range(n_u)) * 1e-5
+        ])
         # cost function
-        l = (x - x_ref).T * Q * (x - x_ref) + u.T * R * u
+        l = (x - x_ref).T * Q * (x - x_ref) + u.T * R * u + u_barrier
         lf = (x - x_ref).T * Qf * (x - x_ref)
         # horizon
         T = 5.0
@@ -402,7 +403,7 @@ class OCP:
     
     @staticmethod
     def zero_vector(m: int) -> sym.Matrix:
-        """ sym m*1-size zero Matrix.
+        """ symbolic m*1-size zero Matrix.
 
         Args:
             m (int): Dimension of vector.
@@ -411,7 +412,7 @@ class OCP:
 
     @staticmethod   
     def zero_matrix(m: int, n: int) -> sym.Matrix:
-        """ sym m*n-size zero Matrix.
+        """ symbolic m*n-size zero Matrix.
 
         Args:
             m (int): dimension of rows
