@@ -1,22 +1,25 @@
 # ocpy
 
-## overview
+## Overview
 Optimal control problem (OCP) solver implemented in Python.
+- DDP (Differential Dynamic Programming)
+- iLQR (iterative Linear Quadratic Regulator)
+
+are currently implemented.
 
 ## Requirements
 - Python3
-  - NumPy
   - SymPy
+  - NumPy
   - Numba
   - Matplotlib
   - seaborn
 
-## example
+## Examples
 ```txt
 lqr.ipynb (while this can be solved easily by DARE)
 cartpole.ipynb
 hexacopter.ipynb
-
 ```
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
 
