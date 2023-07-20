@@ -250,8 +250,8 @@ class DDPSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t)
-                J += l(xs[i], us[i], t)
+                xs[i + 1] = f(xs[i], us[i], t, dt)
+                J += l(xs[i], us[i], t, dt)
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -277,9 +277,9 @@ class DDPSolver(SolverBase):
             return Vxfab
 
         def backward_pass(fx, fu, fxx, fux, fuu, 
-                        lx, lu, lxx, lux, luu, lfx, lfxx,
-                        xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                        damp: float=1e-6):
+                          lx, lu, lxx, lux, luu, lfx, lfxx,
+                          xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
+                          damp: float=1e-6):
             """ Backward pass of DDP.
 
             Args:
@@ -325,16 +325,16 @@ class DDPSolver(SolverBase):
                 # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t)
-                fu_i = fu(x, u, t)
-                fxx_i = fxx(x, u, t)
-                fux_i = fux(x, u, t)
-                fuu_i = fuu(x, u, t)
-                lx_i = lx(x, u, t)
-                lu_i = lu(x, u, t)
-                lxx_i = lxx(x, u, t)
-                lux_i = lux(x, u, t)
-                luu_i = luu(x, u, t)
+                fx_i = fx(x, u, t, dt)
+                fu_i = fu(x, u, t, dt)
+                fxx_i = fxx(x, u, t, dt)
+                fux_i = fux(x, u, t, dt)
+                fuu_i = fuu(x, u, t, dt)
+                lx_i = lx(x, u, t, dt)
+                lu_i = lu(x, u, t, dt)
+                lxx_i = lxx(x, u, t, dt)
+                lux_i = lux(x, u, t, dt)
+                luu_i = luu(x, u, t, dt)
                 lfx_i = lfx(x, t)
                 lfxx_i = lfxx(x, t)
                 # action value derivatives
@@ -357,8 +357,8 @@ class DDPSolver(SolverBase):
             return ks, Ks, delta_V
         
         def forward_pass(f, l, lf, xs: np.ndarray, us: np.ndarray,
-                        t0: float, dt: float,
-                        ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
+                         t0: float, dt: float,
+                         ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
             """ Forward pass of DDP.
 
             Args:
@@ -390,8 +390,8 @@ class DDPSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t)
-                J_new += l(xs_new[i], us_new[i], t)
+                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
+                J_new += l(xs_new[i], us_new[i], t, dt)
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
@@ -493,264 +493,6 @@ class DDPSolver(SolverBase):
         """
         plotter = Plotter(log_dir, ts, xs, us, Js)
         plotter.plot(save=True)
-
-    def _solve(self, result=True , log=False, plot=True):
-        """ Solve OCP via DDP iteration.
-
-        Args:
-            result (bool): If true, result is printed.
-            log (bool): If true, results are logged to log_dir.
-            plot (bool): If true, graphs are generated and saved.
-        
-        Returns:
-            ts (numpy.ndarray): Time history.
-            xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): Optimal control trajectory. (N * n_u)
-            Js (numpy.ndarray): Costs at each iteration.
-        """
-        max_iter = self._max_iter
-        alphas = self._alphas
-        damp_init = self._damp_init
-        damp_min = self._damp_min
-        damp_max = self._damp_max
-        stop_threshold = self._stop_threshold
-        t0 = self._t0
-        x0 = self._x0
-        us = self._us_guess
-        N = self._N
-        T = self._T
-        dt = self._dt
-        # derivatives
-        f, fx, fu, fxx, fux, fuu = self._df
-        l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
-        # success flag of solver.
-        is_success = False        
-        # computational time
-        time_start = time.perf_counter()
-        # initial rollout
-        xs, J = self.rollout(f, l, lf, x0, us, t0, dt)
-        Js = np.zeros(max_iter + 1, dtype=float)
-        Js[0] = J
-        # dumping coefficient of C-Newton.
-        damp = damp_init
-        # main iteration
-        for iter in range(max_iter):
-            print(f'iter: {iter}')
-            # backward pass
-            ks, Ks, Delta_V = self.backward_pass(
-                fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
-                xs, us, t0, dt, damp
-            )
-            print('DeltaV: ',Delta_V)            
-            if np.abs(Delta_V) < stop_threshold:
-                is_success = True
-                break
-            elif Delta_V > 0:
-                # it's no use line searching
-                damp *= 10.0
-                Js[iter + 1] = J
-                continue
-            # forward pass in line search 
-            for alpha in alphas:
-                xs_new, us_new, J_new = self.forward_pass(
-                    f, l, lf, xs, us, t0, dt, ks, Ks, alpha
-                )
-                # print(f'iter: {iter}, alpha: {alpha}, J: {J}, J_new: {J_new}')
-                if J_new < J:
-                    # line search success
-                    xs = xs_new
-                    us = us_new
-                    J = J_new
-                    damp *= 0.5
-                    break
-            else:
-                # line search failed
-                damp *= 2.0
-                damp = min(max(damp, damp_min), damp_max)
-            Js[iter + 1] = J
-        ts = np.array([i*dt for i in range(N + 1)])
-        Js = Js[0:iter + 1]
-        # computational time
-        time_end = time.perf_counter()
-        time_elapsed = time_end - time_start
-        # results
-        if result:
-            self.print_result(is_success, iter, Js[-1], time_elapsed)
-        # log
-        if log:
-            self.log_data(self._log_dir, ts, xs, us, Js)
-        # plot
-        if plot:
-            self.plot_data(self._log_dir, ts, xs, us, Js)
-        return ts, xs, us, Js
-
-    @staticmethod
-    @numba.njit
-    def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
-        """ Rollout state trajectory from initial state and input trajectory,\
-            with cost is calculated.
-
-        Args:
-            f (function): Discrete state equation. x_k+1 = f(x_k, u_k).
-            l (function): Stage cost function.
-            lf (function): Terminal cost function.
-            x0 (np.ndarray): Initial state.
-            us (np.ndarray): Input control trajectory.
-            t0 (float): Initial time.
-            dt (float): Discrete time step.
-        """
-        N = us.shape[0]
-        # time, state trajectory and cost
-        xs = np.zeros((N + 1, x0.shape[0]))
-        xs[0] = x0
-        J = 0.0
-        for i in range(N):
-            t = t0 + i*dt
-            xs[i + 1] = f(xs[i], us[i], t)
-            J += l(xs[i], us[i], t)
-        t = t0 + i*N
-        J += lf(xs[N], t)
-        return xs, J
-
-    @staticmethod
-    @numba.njit
-    def backward_pass(fx, fu, fxx, fux, fuu, 
-                      lx, lu, lxx, lux, luu, lfx, lfxx,
-                      xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                      damp: float=1e-6):
-        """ Backward pass of DDP.
-
-        Args:
-            fx (function):
-            fu (function):
-            fxx (function):
-            fux (function):
-            fuu (function):
-            lx (function):
-            lu (function):
-            lxx (function):
-            lux (function):
-            luu (function):
-            xs (numpy.ndarray): Nominal state trajectory.\
-                Size must be (N+1)*n_u.
-            us (numpy.ndarray): Nominalcontrol trajectory.\
-                Size must be N*n_u.
-            t0 (float): Initial time.
-            dt (float): Discrete time step.
-            damp (float): Damping coefficient.
-
-        Returns:
-            ks (numpy.ndarray): Series of k. Its size is N * n_u
-            Ks (numpy.ndarray): Series of K. Its size is N * (n_u * n_x)
-            Delta_V (float): Expecting change of value function at stage 0.
-        """
-        N = us.shape[0]
-        T = N * dt
-        n_x = xs.shape[1]
-        n_u = us.shape[1]
-        # feedforward term and feedback coeff.
-        ks = np.empty((N, n_u))
-        Ks = np.empty((N, n_u, n_x))
-        # value function at stage i+1
-        Vx = lfx(xs[N], t0 + T)
-        Vxx = lfxx(xs[N], t0 + T)
-        # expected cost cahnge of all stage
-        delta_V = 0
-        # daming matrix
-        Reg = damp * np.eye(n_u)
-        for i in range(N - 1, -1, -1):
-            t = t0 + i*dt
-            # x and u at satge i
-            x, u = xs[i], us[i]
-            # derivatives of stage i
-            fx_i = fx(x, u, t)
-            fu_i = fu(x, u, t)
-            fxx_i = fxx(x, u, t)
-            fux_i = fux(x, u, t)
-            fuu_i = fuu(x, u, t)
-            lx_i = lx(x, u, t)
-            lu_i = lu(x, u, t)
-            lxx_i = lxx(x, u, t)
-            lux_i = lux(x, u, t)
-            luu_i = luu(x, u, t)
-            lfx_i = lfx(x, t)
-            lfxx_i = lfxx(x, t)
-            # action value derivatives
-            Qx = lx_i + fx_i.T @ Vx
-            Qu = lu_i + fu_i.T @ Vx
-            Vxfxx = symutils.vector_dot_tensor(Vx, fxx_i).T
-            Vxfux = symutils.vector_dot_tensor(Vx, fux_i).T
-            Vxfuu = symutils.vector_dot_tensor(Vx, fuu_i).T
-            # Qxx = lxx_i + fx_i.T @ Vxx @ fx_i + Vx @ fxx_i.T
-            # Qux = lux_i + fu_i.T @ Vxx @ fx_i + Vx @ fux_i.T
-            # Quu = luu_i + fu_i.T @ Vxx @ fu_i + Vx @ fuu_i.T
-            Qxx = lxx_i + fx_i.T @ Vxx @ fx_i + Vxfxx
-            Qux = lux_i + fu_i.T @ Vxx @ fx_i + Vxfux
-            Quu = luu_i + fu_i.T @ Vxx @ fu_i + Vxfuu
-            # feedforward and feedback terms
-            Quu_inv = np.linalg.inv(Quu + Reg)
-            k = -Quu_inv @ Qu
-            K = -Quu_inv @ Qux
-            ks[i] = k
-            Ks[i] = K
-            # value function of stage i, passed to i-1.
-            delta_V_i = 0.5 * k.T @ Quu @ k + k.T @ Qu
-            Vx = Qx - K.T @ Quu @ k
-            Vxx = Qxx - K.T @ Quu @ K
-            delta_V += delta_V_i
-        return ks, Ks, delta_V
-
-    @staticmethod
-    @numba.njit
-    def forward_pass(f, l, lf, xs: np.ndarray, us: np.ndarray,
-                     t0: float, dt: float,
-                     ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
-        """ Forward pass of DDP.
-
-        Args:
-            f (function): State function.
-            l (function): Stage cost function.
-            lf (function): Terminal cost function.
-            xs (numpy.ndarray): Nominal state trajectory.\
-                size must be (N+1)*n_u
-            us (numpy.ndarray): Nominal control trajectory.\
-                size must be N*n_u
-            t0 (float): Initial time.
-            dt (float): Discrete time step.
-            ks (numpy.ndarray): Series of k. Size must be N * n_u.
-            Ks (numpy.ndarray): Series of K. Size must be N * (n_u * n_x).
-            alpha (float): step Size of line search. 0<= alpha <= 1.0.
-
-        Returns:
-            xs_new (numpy.ndarray): New state trajectory.
-            us_new (numpy.ndarray): New control trajectory.
-            J_new (float): Cost along with (xs_new, us_new).
-        """
-        N = us.shape[0]
-        T = N * dt
-        # new (xs, us) and cost
-        xs_new = np.empty(xs.shape)
-        xs_new[0] = xs[0]
-        us_new = np.empty(us.shape)
-        J_new = 0.0
-        for i in range(N):
-            t = t0 + i*dt
-            us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-            xs_new[i + 1] = f(xs_new[i], us_new[i], t)
-            # debug
-            try:
-                J_new += l(xs_new[i], us_new[i], t)
-            except:
-                print('i:', i)
-                print('t: ', t)
-                print('alpha: ', alpha)
-                print('xs_new', xs_new)
-                print('us_new', us_new)
-                print(l(xs_new[i], us_new[i], t))
-                raise Exception('stop!')
-        # terminal cost
-        J_new += lf(xs_new[N], t + T)
-        return xs_new, us_new, J_new
 
 
 class iLQRSolver(SolverBase):
@@ -935,8 +677,8 @@ class iLQRSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t)
-                J += l(xs[i], us[i], t)
+                xs[i + 1] = f(xs[i], us[i], t, dt)
+                J += l(xs[i], us[i], t, dt)
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -987,21 +729,21 @@ class iLQRSolver(SolverBase):
                 # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t)
-                fu_i = fu(x, u, t)
-                lx_i = lx(x, u, t)
-                lu_i = lu(x, u, t)
-                lxx_i = lxx(x, u, t)
-                lux_i = lux(x, u, t)
-                luu_i = luu(x, u, t)
+                fx_i = fx(x, u, t, dt)
+                fu_i = fu(x, u, t, dt)
+                lx_i = lx(x, u, t, dt)
+                lu_i = lu(x, u, t, dt)
+                lxx_i = lxx(x, u, t, dt)
+                lux_i = lux(x, u, t, dt)
+                luu_i = luu(x, u, t, dt)
                 lfx_i = lfx(x, t)
                 lfxx_i = lfxx(x, t)
                 # action value derivatives
                 Qx = lx_i + fx_i.T @ Vx
                 Qu = lu_i + fu_i.T @ Vx
-                Qxx = (lxx_i + fx_i.T @ Vxx @ fx_i).reshape((n_x, n_x))
-                Qux = (lux_i + fu_i.T @ Vxx @ fx_i).reshape((n_u, n_x))
-                Quu = (luu_i + fu_i.T @ Vxx @ fu_i).reshape((n_u, n_u))
+                Qxx = (lxx_i + fx_i.T @ Vxx @ fx_i)#.reshape((n_x, n_x))
+                Qux = (lux_i + fu_i.T @ Vxx @ fx_i)#.reshape((n_u, n_x))
+                Quu = (luu_i + fu_i.T @ Vxx @ fu_i)#.reshape((n_u, n_u))
                 # feedforward and feedback terms
                 Quu_inv = np.linalg.inv(Quu + Reg)
                 k = -Quu_inv @ Qu
@@ -1049,8 +791,8 @@ class iLQRSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t)
-                J_new += l(xs_new[i], us_new[i], t)
+                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
+                J_new += l(xs_new[i], us_new[i], t, dt)
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
