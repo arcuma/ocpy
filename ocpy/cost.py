@@ -1,4 +1,4 @@
-import sympy
+import sympy as sym
 import numpy as np
 
 from ocpy import symutils
@@ -7,16 +7,16 @@ from ocpy import symutils
 class SymCost:
     """ Symbolic Cost class.
     """
-    def __init__(self, x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
-                 l: sympy.Symbol, lf: sympy.Symbol):    
+    def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
+                 l: sym.Symbol, lf: sym.Symbol):    
         """Symbolic Cost class.
     
             Args:
-                x (sympy.Matrix): State vector.
-                u (sympy.Matrix): Control input vector.
-                t (sympy.Symbol): Time.
-                l (sympy.Symbol): Stage cost.
-                lf (sympy.Symbol): Terminal cost.
+                x (sym.Matrix): State vector.
+                u (sym.Matrix): Control input vector.
+                t (sym.Symbol): Time.
+                l (sym.Symbol): Stage cost.
+                lf (sym.Symbol): Terminal cost.
         """
         lx = symutils.diff_scalar(l, x)
         lu = symutils.diff_scalar(l, u)
@@ -36,26 +36,26 @@ class SymCost:
         self.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
 
     @staticmethod
-    def InitByManual(x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
-                     l: sympy.Symbol, lx: sympy.Matrix, lu: sympy.Matrix,
-                     lxx: sympy.Matrix, lux: sympy.Matrix, luu: sympy.Matrix,
-                     lf: sympy.Symbol, lfx: sympy.Matrix, lfxx: sympy.Matrix):
+    def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
+                     l: sym.Symbol, lx: sym.Matrix, lu: sym.Matrix,
+                     lxx: sym.Matrix, lux: sym.Matrix, luu: sym.Matrix,
+                     lf: sym.Symbol, lfx: sym.Matrix, lfxx: sym.Matrix):
         """ Initialize dynamics derivatives manually.
         Args:
-            x (sympy.Matrix): State vector.
-            u (sympy.Matrix): Control input vector.
-            t (sympy.Symbol): Time.
-            l (sympy.Matrix): Stage cost
-            lx (sympy.Symbol): Derivative of l w.r.t. state x
-            lu (sympy.Symbol): Derivative of l w.r.t. input u
-            lxx (sympy.Matrix): Derivative of lx w.r.t. x.
-            lux (sympy.Matrix): Derivative of lu w.r.t. x.
-            luu (sympy.Matrix): Derivative of lu w.r.t. u.
-            lf (sympy.Matrix): Terminal cost
-            lfx (sympy.Matrix): Derivative of lf w.r.t. state x
-            lfxx (sympy.Matrix): Derivative of lfx w.r.t. state x
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
+            t (sym.Symbol): Time.
+            l (sym.Matrix): Stage cost
+            lx (sym.Symbol): Derivative of l w.r.t. state x
+            lu (sym.Symbol): Derivative of l w.r.t. input u
+            lxx (sym.Matrix): Derivative of lx w.r.t. x.
+            lux (sym.Matrix): Derivative of lu w.r.t. x.
+            luu (sym.Matrix): Derivative of lu w.r.t. u.
+            lf (sym.Matrix): Terminal cost
+            lfx (sym.Matrix): Derivative of lf w.r.t. state x
+            lfxx (sym.Matrix): Derivative of lfx w.r.t. state x
         """
-        symcost = SymCost(x, u, t, sympy.zeros(1)[0], sympy.zeros(1)[0])
+        symcost = SymCost(x, u, t, sym.zeros(1)[0, 0], sym.zeros(1)[0, 0])
         symcost.l = l
         symcost.lx = lx
         symcost.lu = lu
@@ -73,15 +73,17 @@ class SymCost:
         """
         return self.dl
 
-    def substitute_constatnts(self, dl_sym, dt=None, dt_value=None, 
-                              scalar_dict=None, vector_dict=None, matrix_dict=None):
+    def substitute_constatnts(self, dl_sym: list, 
+                              scalar_dict: dict=None, vector_dict: dict=None, 
+                              matrix_dict: dict=None, dt: sym.Symbol=None,
+                              dt_value: float=None):
         """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
         Args:
             df_sym (list): Derivatives of l,\
                 [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx].
-            dt (Sympy.symbol): Time discretization step
+            dt (sym.symbol): Time discretization step
             dt_value (float): Value of dt
             scalar_dict (dict): {"name": (symbol, value)}).
             vector_dict (dict): {"name": (symbol, value)}).
@@ -92,7 +94,7 @@ class SymCost:
                 cost function derivatives.
         """
         self.df_subs = symutils.substitute_constants_list(
-            dl_sym, scalar_dict, vector_dict, matrix_dict
+            dl_sym, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
         return self.df_subs
 
@@ -100,32 +102,36 @@ class NumCost:
     """ Turn symbolic dynamics into fast universal function.
 
     Args:
-        x (sympy.Matrix): State vector.
-        u (sympy.Matrix): Control input vector.
-        l (sympy.Symbol): Stage cost
-        lx (sympy.Matrix): Derivative of l w.r.t. state x
-        lu (sympy.Matrix): Derivative of l w.r.t. input u
-        lxx (sympy.Matrix): Derivative of lx w.r.t. x.
-        lux (sympy.Matrix): Derivative of lu w.r.t. x.
-        luu (sympy.Matrix): Derivative of lu w.r.t. u.
-        lf (sympy.Matrix): Terminal cost
-        lfx (sympy.Matrix): Derivative of lf w.r.t. state x
-        lfxx (sympy.Matrix): Derivative of lfx w.r.t. state x
+        x (sym.Matrix): State vector.
+        u (sym.Matrix): Control input vector.
+        l (sym.Symbol): Stage cost
+        lx (sym.Matrix): Derivative of l w.r.t. state x
+        lu (sym.Matrix): Derivative of l w.r.t. input u
+        lxx (sym.Matrix): Derivative of lx w.r.t. x.
+        lux (sym.Matrix): Derivative of lu w.r.t. x.
+        luu (sym.Matrix): Derivative of lu w.r.t. u.
+        lf (sym.Matrix): Terminal cost
+        lfx (sym.Matrix): Derivative of lf w.r.t. state x
+        lfxx (sym.Matrix): Derivative of lfx w.r.t. state x
 
     Note:
         Confirm all constant symbolcs (e.g. Q, R,...) are substituted.
     """
-    def __init__(self, x, u, t, l_sym, lx_sym, lu_sym, lxx_sym, lux_sym, luu_sym,
-                 lf_sym, lfx_sym, lfxx_sym):
-        l_ufunc = symutils.lambdify([x, u, t], l_sym)
-        lx_ufunc = symutils.lambdify([x, u, t], lx_sym)
-        lu_ufunc = symutils.lambdify([x, u, t], lu_sym)
-        lxx_ufunc = symutils.lambdify([x, u, t], lxx_sym)
-        lux_ufunc = symutils.lambdify([x, u, t], lux_sym)
-        luu_ufunc = symutils.lambdify([x, u, t], luu_sym)
-        lf_ufunc = symutils.lambdify([x, t], lf_sym)
-        lfx_ufunc = symutils.lambdify([x, t], lfx_sym)
-        lfxx_ufunc = symutils.lambdify([x, t], lfxx_sym)
+    def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, dt: sym.Symbol,
+                 l_sym: sym.Matrix, lx_sym: sym.Matrix, lu_sym: sym.Matrix, 
+                 lxx_sym: sym.Matrix, lux_sym: sym.Matrix, luu_sym: sym.Matrix,
+                 lf_sym: sym.Matrix, lfx_sym: sym.Matrix, lfxx_sym: sym.Matrix):
+        args_stage = [x, u, t, dt]
+        args_terminal = [x, t]
+        l_ufunc = symutils.lambdify(args_stage, l_sym)
+        lx_ufunc = symutils.lambdify(args_stage, lx_sym)
+        lu_ufunc = symutils.lambdify(args_stage, lu_sym)
+        lxx_ufunc = symutils.lambdify(args_stage, lxx_sym)
+        lux_ufunc = symutils.lambdify(args_stage, lux_sym)
+        luu_ufunc = symutils.lambdify(args_stage, luu_sym)
+        lf_ufunc = symutils.lambdify(args_terminal, lf_sym)
+        lfx_ufunc = symutils.lambdify(args_terminal, lfx_sym)
+        lfxx_ufunc = symutils.lambdify(args_terminal, lfxx_sym)
         self.dl = [l_ufunc, lx_ufunc, lu_ufunc, lxx_ufunc, lux_ufunc, luu_ufunc,
                    lf_ufunc, lfx_ufunc, lfxx_ufunc]
 

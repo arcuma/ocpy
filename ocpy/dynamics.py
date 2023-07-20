@@ -1,22 +1,22 @@
-import sympy
+import sympy as sym
 import numpy as np
 
 from ocpy import symutils
 
 
 class SymDynamics:
-    """ Create Dynamics class. Derivatives are calculated via sympy.
+    """ Create Dynamics class. Derivatives are calculated via sym.
     """
     
-    def __init__(self, x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
-                 f: sympy.Matrix):
-        """ Create Dynamics class. Derivatives are calculated via sympy.
+    def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
+                 f: sym.Matrix):
+        """ Create Dynamics class. Derivatives are calculated via sym.
 
         Args:
-            x (sympy.Matrix): State vector.
-            u (sympy.Matrix): Control input vector.
-            t (sympy.Symbol): Time.
-            f (sympy.Matrix): State equation, f(x, u, t)
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
+            t (sym.Symbol): Time.
+            f (sym.Matrix): State equation, f(x, u, t)
         """
         fx = symutils.diff_vector(f, x)
         fu = symutils.diff_vector(f, u)
@@ -32,25 +32,25 @@ class SymDynamics:
         self.df = [f, fx, fu, fxx, fux, fuu]
 
     @staticmethod
-    def InitByManual(x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
-                     f: sympy.Matrix, fx: sympy.Matrix, fu: sympy.Matrix,
-                     fxx: sympy.Matrix, fux: sympy.Matrix, fuu: sympy.Matrix):
+    def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
+                     f: sym.Matrix, fx: sym.Matrix, fu: sym.Matrix,
+                     fxx: sym.Matrix, fux: sym.Matrix, fuu: sym.Matrix):
         """ Initialize dynamics derivatives manually.
 
         Args:
-            x (sympy.Matrix): State vector.
-            u (sympy.Matrix): Control input vector.
-            t (sympy.Symbol): Time.
-            f (sympy.Matrix): Function of state equation.
-            fx (sympy.Matrix): Derivative of f w.r.t. state x.
-            fu (sympy.Matrix): Derivative of f w.r.t. input u.
-            fxx (sympy.Array): Derivative of f w.r.t. x and x.
-            fux (sympy.Array): Derivative of f w.r.t. u and x.
-            fux (sympy.Array): Derivative of f w.r.t. u and u.
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
+            t (sym.Symbol): Time.
+            f (sym.Matrix): Function of state equation.
+            fx (sym.Matrix): Derivative of f w.r.t. state x.
+            fu (sym.Matrix): Derivative of f w.r.t. input u.
+            fxx (sym.Array): Derivative of f w.r.t. x and x.
+            fux (sym.Array): Derivative of f w.r.t. u and x.
+            fux (sym.Array): Derivative of f w.r.t. u and u.
             continuous (bool): Is continous model.
         """
         assert f.shape == x.shape
-        symdyn = SymDynamics(t, x, u, sympy.zeros(*x.shape))
+        symdyn = SymDynamics(t, x, u, sym.zeros(*x.shape))
         symdyn.f = f
         symdyn.fx = fx
         symdyn.fu = fu
@@ -68,8 +68,10 @@ class SymDynamics:
         """
         return self.df
 
-    def substitute_constatnts(self, scalar_dict: dict=None, vector_dict: dict=None, 
-                              matrix_dict: dict=None):
+    def substitute_constatnts(self, df_sym: list,
+                              scalar_dict: dict=None, vector_dict: dict=None, 
+                              matrix_dict: dict=None, dt: sym.Symbol=None,
+                              dt_value: float=None,):
         """ Substitute symbolic constatnts into specic values 
                 for numerical calculation.
 
@@ -83,39 +85,40 @@ class SymDynamics:
                     dynamics derivatives.
         """
         self.df_subs = symutils.substitute_constants_list(
-            self.df, scalar_dict, vector_dict, matrix_dict
+            self.df, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
         return self.df_subs
 
 class NumDynamics:
     """ Generate numerical function of dynamics from symbolic expression.
     """
-    def __init__(self, x: sympy.Matrix, u: sympy.Matrix, t: sympy.Symbol,
-                 f_sym: sympy.Matrix, fx_sym: sympy.Matrix, fu_sym: sympy.Matrix,
-                 fxx_sym: sympy.Matrix, fux_sym: sympy.Matrix,
-                 fuu_sym: sympy.Matrix):
+    def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, dt: sym.Symbol,
+                 f_sym: sym.Matrix, fx_sym: sym.Matrix, fu_sym: sym.Matrix,
+                 fxx_sym: sym.Matrix, fux_sym: sym.Matrix,
+                 fuu_sym: sym.Matrix):
         """ Turn symbolic dynamics into fast universal function.
 
         Args:
-            x (sympy.Matrix): state vector.
-            u (sympy.Matrix): control input vector.
-            t (sympy.Symbol): Time.
-            f_sym (sympy.Matrix): Function of state equation.
-            fx_sym (sympy.Matrix): Derivative of f w.r.t. state x.
-            fu_sym (sympy.Matrix): Derivative of f w.r.t. input u.
-            fxx_sym (sympy.Array): Derivative of f w.r.t. x and x.
-            fux_sym (sympy.Array): Derivative of f w.r.t. u and x.
-            fux_sym (sympy.Array): Derivative of f w.r.t. u and u.
+            x (sym.Matrix): state vector.
+            u (sym.Matrix): control input vector.
+            t (sym.Symbol): Time.
+            f_sym (sym.Matrix): Function of state equation.
+            fx_sym (sym.Matrix): Derivative of f w.r.t. state x.
+            fu_sym (sym.Matrix): Derivative of f w.r.t. input u.
+            fxx_sym (sym.Array): Derivative of f w.r.t. x and x.
+            fux_sym (sym.Array): Derivative of f w.r.t. u and x.
+            fux_sym (sym.Array): Derivative of f w.r.t. u and u.
 
         Note:
             Confirm all symbolic constants (e.g. mass, lentgth,) are substituted.
         """
-        f_ufunc = symutils.lambdify([x, u, t], f_sym)
-        fx_ufunc = symutils.lambdify([x, u, t], fx_sym)
-        fu_ufunc = symutils.lambdify([x, u, t], fu_sym)
-        fxx_ufunc = symutils.lambdify([x, u, t], fxx_sym)
-        fux_ufunc = symutils.lambdify([x, u, t], fux_sym)
-        fuu_ufunc = symutils.lambdify([x, u, t], fuu_sym)
+        args = [x, u, t, dt]
+        f_ufunc = symutils.lambdify(args, f_sym)
+        fx_ufunc = symutils.lambdify(args, fx_sym)
+        fu_ufunc = symutils.lambdify(args, fu_sym)
+        fxx_ufunc = symutils.lambdify(args, fxx_sym)
+        fux_ufunc = symutils.lambdify(args, fux_sym)
+        fuu_ufunc = symutils.lambdify(args, fuu_sym)
         self.f_ufunc = f_ufunc
         self.fx_ufunc = fx_ufunc
         self.fu_ufunc = fu_ufunc

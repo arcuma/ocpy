@@ -68,7 +68,7 @@ def diff_matrix(M: sym.Matrix, x: sym.Matrix) -> sym.Array:
         no longer a sym.Matrix.
     """
     Mx = sym.diff(M, x.T)[0]
-    # For MutableDenseNDimArray has not attribute subs()
+    # For MutableDenseNDimArray don't have attribute subs()
     return sym.ImmutableDenseNDimArray(Mx)
 
 

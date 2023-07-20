@@ -136,13 +136,13 @@ class OCP:
         # Substitute symbolic constants.
         df_subs = symutils.substitute_constants_list(
             self._df_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
-            self._dt, self._dt_value)
+            ) #self._dt, self._dt_value)
         dl_subs = symutils.substitute_constants_list(            
             self._dl_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
-            self._dt, self._dt_value)
+            ) #self._dt, self._dt_value)
         # lambdify
-        num_dynamics = NumDynamics(self._x, self._u, self._t, *df_subs)
-        num_cost = NumCost(self._x, self._u, self._t, *dl_subs)
+        num_dynamics = NumDynamics(self._x, self._u, self._t, self._dt, *df_subs)
+        num_cost = NumCost(self._x, self._u, self._t, self._dt, *dl_subs)
         # f, fx, fu, fxx, fux, fuu
         df_ufunc = num_dynamics.get_derivatives()
         # l, lx, lu, lxx, lux, luu, lf, lfx, lfxx

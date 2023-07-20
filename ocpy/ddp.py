@@ -250,8 +250,8 @@ class DDPSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t)
-                J += l(xs[i], us[i], t)
+                xs[i + 1] = f(xs[i], us[i], t, dt)
+                J += l(xs[i], us[i], t, dt)
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -277,9 +277,9 @@ class DDPSolver(SolverBase):
             return Vxfab
 
         def backward_pass(fx, fu, fxx, fux, fuu, 
-                        lx, lu, lxx, lux, luu, lfx, lfxx,
-                        xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                        damp: float=1e-6):
+                          lx, lu, lxx, lux, luu, lfx, lfxx,
+                          xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
+                          damp: float=1e-6):
             """ Backward pass of DDP.
 
             Args:
@@ -325,16 +325,16 @@ class DDPSolver(SolverBase):
                 # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t)
-                fu_i = fu(x, u, t)
-                fxx_i = fxx(x, u, t)
-                fux_i = fux(x, u, t)
-                fuu_i = fuu(x, u, t)
-                lx_i = lx(x, u, t)
-                lu_i = lu(x, u, t)
-                lxx_i = lxx(x, u, t)
-                lux_i = lux(x, u, t)
-                luu_i = luu(x, u, t)
+                fx_i = fx(x, u, t, dt)
+                fu_i = fu(x, u, t, dt)
+                fxx_i = fxx(x, u, t, dt)
+                fux_i = fux(x, u, t, dt)
+                fuu_i = fuu(x, u, t, dt)
+                lx_i = lx(x, u, t, dt)
+                lu_i = lu(x, u, t, dt)
+                lxx_i = lxx(x, u, t, dt)
+                lux_i = lux(x, u, t, dt)
+                luu_i = luu(x, u, t, dt)
                 lfx_i = lfx(x, t)
                 lfxx_i = lfxx(x, t)
                 # action value derivatives
@@ -357,8 +357,8 @@ class DDPSolver(SolverBase):
             return ks, Ks, delta_V
         
         def forward_pass(f, l, lf, xs: np.ndarray, us: np.ndarray,
-                        t0: float, dt: float,
-                        ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
+                         t0: float, dt: float,
+                         ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
             """ Forward pass of DDP.
 
             Args:
@@ -390,8 +390,8 @@ class DDPSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t)
-                J_new += l(xs_new[i], us_new[i], t)
+                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
+                J_new += l(xs_new[i], us_new[i], t, dt)
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
@@ -606,7 +606,7 @@ class DDPSolver(SolverBase):
         J = 0.0
         for i in range(N):
             t = t0 + i*dt
-            xs[i + 1] = f(xs[i], us[i], t)
+            xs[i + 1] = f(xs[i], us[i], t, dt)
             J += l(xs[i], us[i], t)
         t = t0 + i*N
         J += lf(xs[N], t)
@@ -663,16 +663,16 @@ class DDPSolver(SolverBase):
             # x and u at satge i
             x, u = xs[i], us[i]
             # derivatives of stage i
-            fx_i = fx(x, u, t)
-            fu_i = fu(x, u, t)
-            fxx_i = fxx(x, u, t)
-            fux_i = fux(x, u, t)
-            fuu_i = fuu(x, u, t)
-            lx_i = lx(x, u, t)
-            lu_i = lu(x, u, t)
-            lxx_i = lxx(x, u, t)
-            lux_i = lux(x, u, t)
-            luu_i = luu(x, u, t)
+            fx_i = fx(x, u, t, dt)
+            fu_i = fu(x, u, t, dt)
+            fxx_i = fxx(x, u, t, dt)
+            fux_i = fux(x, u, t, dt)
+            fuu_i = fuu(x, u, t, dt)
+            lx_i = lx(x, u, t, dt)
+            lu_i = lu(x, u, t, dt)
+            lxx_i = lxx(x, u, t, dt)
+            lux_i = lux(x, u, t, dt)
+            luu_i = luu(x, u, t, dt)
             lfx_i = lfx(x, t)
             lfxx_i = lfxx(x, t)
             # action value derivatives
@@ -736,10 +736,10 @@ class DDPSolver(SolverBase):
         for i in range(N):
             t = t0 + i*dt
             us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-            xs_new[i + 1] = f(xs_new[i], us_new[i], t)
+            xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
             # debug
             try:
-                J_new += l(xs_new[i], us_new[i], t)
+                J_new += l(xs_new[i], us_new[i], t, dt)
             except:
                 print('i:', i)
                 print('t: ', t)
@@ -935,8 +935,8 @@ class iLQRSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t)
-                J += l(xs[i], us[i], t)
+                xs[i + 1] = f(xs[i], us[i], t, dt)
+                J += l(xs[i], us[i], t, dt)
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -987,13 +987,13 @@ class iLQRSolver(SolverBase):
                 # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t)
-                fu_i = fu(x, u, t)
-                lx_i = lx(x, u, t)
-                lu_i = lu(x, u, t)
-                lxx_i = lxx(x, u, t)
-                lux_i = lux(x, u, t)
-                luu_i = luu(x, u, t)
+                fx_i = fx(x, u, t, dt)
+                fu_i = fu(x, u, t, dt)
+                lx_i = lx(x, u, t, dt)
+                lu_i = lu(x, u, t, dt)
+                lxx_i = lxx(x, u, t, dt)
+                lux_i = lux(x, u, t, dt)
+                luu_i = luu(x, u, t, dt)
                 lfx_i = lfx(x, t)
                 lfxx_i = lfxx(x, t)
                 # action value derivatives
@@ -1049,8 +1049,8 @@ class iLQRSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t)
-                J_new += l(xs_new[i], us_new[i], t)
+                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
+                J_new += l(xs_new[i], us_new[i], t, dt)
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
