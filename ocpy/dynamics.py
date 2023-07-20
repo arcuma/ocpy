@@ -18,14 +18,14 @@ class SymDynamics:
             t (sym.Symbol): Time.
             f (sym.Matrix): State equation, f(x, u, t)
         """
-        fx = symutils.diff_vector(f, x)
-        fu = symutils.diff_vector(f, u)
+        fx  = symutils.diff_vector(f, x)
+        fu  = symutils.diff_vector(f, u)
         fxx = symutils.diff_matrix(fx, x)
         fux = symutils.diff_matrix(fu, x)
         fuu = symutils.diff_matrix(fu, u)
-        self.f = f
-        self.fx = fx
-        self.fu = fu
+        self.f   = f
+        self.fx  = fx
+        self.fu  = fu
         self.fxx = fxx
         self.fux = fux
         self.fuu = fuu
@@ -51,9 +51,9 @@ class SymDynamics:
         """
         assert f.shape == x.shape
         symdyn = SymDynamics(t, x, u, sym.zeros(*x.shape))
-        symdyn.f = f
-        symdyn.fx = fx
-        symdyn.fu = fu
+        symdyn.f   = f
+        symdyn.fx  = fx
+        symdyn.fu  = fu
         symdyn.fxx = fxx
         symdyn.fux = fux
         symdyn.fuu = fuu
@@ -89,6 +89,7 @@ class SymDynamics:
         )
         return self.df_subs
 
+
 class NumDynamics:
     """ Generate numerical function of dynamics from symbolic expression.
     """
@@ -113,19 +114,19 @@ class NumDynamics:
             Confirm all symbolic constants (e.g. mass, lentgth,) are substituted.
         """
         args = [x, u, t, dt]
-        f_ufunc = symutils.lambdify(args, f_sym)
-        fx_ufunc = symutils.lambdify(args, fx_sym)
-        fu_ufunc = symutils.lambdify(args, fu_sym)
-        fxx_ufunc = symutils.lambdify(args, fxx_sym)
-        fux_ufunc = symutils.lambdify(args, fux_sym)
-        fuu_ufunc = symutils.lambdify(args, fuu_sym)
-        self.f_ufunc = f_ufunc
-        self.fx_ufunc = fx_ufunc
-        self.fu_ufunc = fu_ufunc
-        self.fxx_ufunc = fxx_ufunc
-        self.fux_ufunc = fux_ufunc
-        self.fuu_ufunc = fuu_ufunc
-        self.df = [f_ufunc, fx_ufunc, fu_ufunc, fxx_ufunc, fux_ufunc, fuu_ufunc]
+        df_sym = [f_sym, fx_sym, fu_sym, fxx_sym, fux_sym, fuu_sym]
+        df = []
+        for i, func_sym in enumerate(df_sym):
+            args = [x, u, t, dt]
+            dim_reduction = True if i == 0 else False
+            df.append(symutils.lambdify(args, func_sym, dim_reduction))        
+        self.f   = df[0]
+        self.fx  = df[1]
+        self.fu  = df[2]
+        self.fxx = df[3]
+        self.fux = df[4]
+        self.fuu = df[5]
+        self.df  = df
     
     def get_derivatives(self):
         """ Return dynamics ufunction.

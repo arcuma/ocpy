@@ -125,6 +125,10 @@ def vector_dot_tensor_sym(v, T):
 @njit
 def vector_dot_tensor(v: np.ndarray, T: np.ndarray):
     """ Tensor contraction between 1d and 3d.
+
+    Args:
+        v (np.ndarray): vector.
+        T (np.ndarray): 3rd order tensor.
     """
     l, m, n = T.shape
     M = np.zeros((l, n))
@@ -217,10 +221,11 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
 
     Args:
         args (list) : Arguments of function f. 
-            If f = f(x, y, z),  args=[x, y, z].
+            That is, if f = f(x, y, z),  args is [x, y, z].
         f (sym symbol or matrix) : Function.
-        dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transform \
+        dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transformed \
             into 1d ndarray.
+        numba_njit (bool=True): If true, ufunc is wrapped by numba.njit.
             
     Returns:
         f_ufunc : numpy ufunc.
@@ -228,29 +233,25 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
     if numba_njit:
         if isinstance(f, sym.Matrix):
             m, n = f.shape
-            # needed for numba knowing datatype is float.
+            # for needed that numba know datatype is float.
             f += 1e-128*np.ones((m, n))
             # convert into 1d array
             if (m == 1 or n == 1) and dim_reduction:
                 if n == 1:
                     f = f.T
                 f = sym.Array(f)[0]
-                f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
-                return f_list_njit
-                # # unless this operation, f_ufunc returns list, not ndarray. 
+                f_numpy = sym.lambdify(args, f, modules='numpy')
+                return njit(f_numpy)
+                # expired
                 # f_numpy = lambda *args: np.array(f_list_njit(*args))
                 # return njit(f_numpy)
         elif isinstance(f, sym.Array):
             l, m, n = f.shape
             f = sym.MutableDenseNDimArray(f)
-            # needed for numba knowing datatype is float.
-            # for i in range(l):
-            #     for j in range(m):
-            #         for k in range(n):
-            #             f[i, j, k] += 1e-128
+            # for needed that numba know datatype is float.
             f += 1e-128 * np.ones((l, m, n))
             f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
-            # for 3D array, this operation is needed turning into ndarray.
+            # for 3D array, this operation is needed to turn into ndarray.
             f_numpy = lambda *args: np.array(f_list_njit(*args))
             return njit(f_numpy)
         f_numpy = sym.lambdify(args, f, modules='numpy')
@@ -275,18 +276,21 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
         return f_ufunc
 
 
-def lambdify_list(args: list, f_list: list):
+def lambdify_list(args: list, f_list: list, dim_reduction: bool=True,
+                  numba_njit :bool=True):
     """ Call sym.lambdify to transform funciton into fast numpy ufunc.
 
     Args:
         args (list) : Arguments of function f. \
             If f = f(x, y, z),  args are [x, y, z].
         f_list (list (sym symbol or matrix)) : list of functions.
-        
+        dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transformed \
+            into 1d ndarray.
+        numba_njit (bool=True): If true, ufunc is wrapped by numba.njit.
     Returns:
         f_ufunc : numpy ufunc.
     """
     ufunc_list = []
     for f in f_list:
-        ufunc_list.append(lambdify(args, f))
+        ufunc_list.append(lambdify(args, f), dim_reduction, numba_njit)
     return ufunc_list
