@@ -1,7 +1,6 @@
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
-ocpy/test.py
 ocpy/ocpy/
 rl_cartpole.ipynb
 log/
@@ -9,6 +8,7 @@ test/
 sympy_test/
 cartpole_copy.ipynb
 test.ipynb
+memo.md
 *.db
 *.egg-info
 *.log
