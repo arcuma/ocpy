@@ -45,13 +45,12 @@ class DDPSolver(SolverBase):
         self._damp_min = 1e-5
         self._damp_max = 1e5
         self._stop_threshold = 1e-3
-
         # functions derivatives.
-        self._df, self._dl = ocp.get_derivatives()
+        self._df = ocp.get_df()
+        self._dl = ocp.get_dl()
         self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
         self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
             self._lf, self._lfx, self._lfxx = self._dl
-        
         # pseudo AOT
         DDPSolver.ddp(
             self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu, 
@@ -475,7 +474,8 @@ class iLQRSolver(SolverBase):
         self._stop_threshold = 1e-3
 
         # functions derivatives.
-        self._df, self._dl = ocp.get_derivatives()
+        self._df = ocp.get_df()
+        self._dl = ocp.get_dl()
         self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
         self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
             self._lf, self._lfx, self._lfxx = self._dl
