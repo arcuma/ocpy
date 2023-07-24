@@ -43,6 +43,8 @@ class OCP:
         self._dl_sym = None
         self._dg_sym = None
         self._dh_sym = None
+        self._n_g = 0
+        self._n_h = 0
         self._has_ineq_constraints = False
         self._has_eq_constraints = False
         self._is_ocp_defined = False
@@ -123,6 +125,7 @@ class OCP:
             # hold
             self._sym_ineq_constraints = sym_ineq_constraints
             self._dg_sym = dg_sym
+            self._n_g = len(dg_sym)
             self._has_ineq_constraints = has_ineq_constraints
         # equality constraints
         if h is not None:
@@ -437,6 +440,16 @@ class OCP:
         """
         return self._n_u
     
+    def get_n_g(self) -> int:
+        """ Return dimension of inequality constraints.
+        """
+        return self._n_g
+    
+    def get_n_h(self) -> int:
+        """ Return dimension of equality constraints.
+        """
+        return self._n_h
+
     def get_f_empty(self):
         """ Return n_x*1-size symbolic zero vector.
         """

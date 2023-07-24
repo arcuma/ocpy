@@ -1,7 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
-ocpy/ocpy/
+ocpy/riccati_recursion.py
 rl_cartpole.ipynb
 log/
 test/
