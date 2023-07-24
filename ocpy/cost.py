@@ -31,9 +31,10 @@ class SymCost:
         self.lxx  = lxx
         self.lux  = lux
         self.luu  = luu
+        self.lf   = lf
         self.lfx  = lfx
         self.lfxx = lfxx
-        self.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+        self.dl = (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
 
     @staticmethod
     def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
@@ -63,9 +64,10 @@ class SymCost:
         symcost.lxx  = lxx
         symcost.lux  = lux
         symcost.luu  = luu
+        symcost.lf   = lf
         symcost.lfx  = lfx
         symcost.lfxx = lfxx
-        symcost.dl = [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+        symcost.dl = (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
 
     def get_derivatives(self):
         """ Get derivatives of dynamics.
@@ -140,7 +142,7 @@ class NumCost:
         self.lf   = dl[6]
         self.lfx  = dl[7]
         self.lfxx = dl[8]
-        self.dl   = dl
+        self.dl   = tuple(dl)
 
     def get_derivatives(self):
         """ Return dynamics ufunction.
