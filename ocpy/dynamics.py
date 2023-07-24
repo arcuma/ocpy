@@ -29,7 +29,7 @@ class SymDynamics:
         self.fxx = fxx
         self.fux = fux
         self.fuu = fuu
-        self.df = [f, fx, fu, fxx, fux, fuu]
+        self.df = (f, fx, fu, fxx, fux, fuu)
 
     @staticmethod
     def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
@@ -57,7 +57,7 @@ class SymDynamics:
         symdyn.fxx = fxx
         symdyn.fux = fux
         symdyn.fuu = fuu
-        symdyn.df = [f, fx, fu, fxx, fux, fuu]
+        symdyn.df = (f, fx, fu, fxx, fux, fuu)
         return symdyn
 
     def get_derivatives(self):
@@ -126,7 +126,7 @@ class NumDynamics:
         self.fxx = df[3]
         self.fux = df[4]
         self.fuu = df[5]
-        self.df  = df
+        self.df  = tuple(df)
     
     def get_derivatives(self):
         """ Return dynamics ufunction.

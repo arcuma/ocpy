@@ -27,7 +27,7 @@ class SymIneqConstraints:
         self.gxx = gxx
         self.gux = gux
         self.guu = guu
-        self.dg = [g, gx, gu, gxx, gux, guu]
+        self.dg = (g, gx, gu, gxx, gux, guu)
     
     @staticmethod
     def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
@@ -54,7 +54,7 @@ class SymIneqConstraints:
         symineq.gxx = gxx
         symineq.gux = gux
         symineq.guu = guu
-        symineq.dg = [g, gx, gu, gxx, gux, guu]
+        symineq.dg = (g, gx, gu, gxx, gux, guu)
         return symineq
 
     def get_derivatives(self):
@@ -131,7 +131,7 @@ class NumIneqConstraints:
         self.gxx = dg[3]
         self.gux = dg[4]
         self.guu = dg[5]
-        self.dg  = dg
+        self.dg  = tuple(dg)
 
     def get_derivatives(self):
         """ return inequality constraints derivarives ufunction.
@@ -140,7 +140,7 @@ class NumIneqConstraints:
             dg (list): ufunc list of [g, gx, gu, gxx, gux, guu],\
             whose arguments are x, u, t
         """
-        return self.dg_sym[0].shape[0]
+        return self.dg
     
 
 class SymEqConstraints:
@@ -162,7 +162,7 @@ class SymEqConstraints:
         self.hxx = hxx
         self.hux = hux
         self.huu = huu
-        self.dh = [h, hx, hu, hxx, hux, huu]
+        self.dh = (h, hx, hu, hxx, hux, huu)
     
     @staticmethod
     def InitByManual(x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
@@ -189,7 +189,7 @@ class SymEqConstraints:
         symeq.hxx = hxx
         symeq.hux = hux
         symeq.huu = huu
-        symeq.dh = [h, hx, hu, hxx, hux, huu]
+        symeq.dh = (h, hx, hu, hxx, hux, huu)
         return symeq
 
     def get_derivatives(self):
@@ -266,13 +266,13 @@ class NumEqConstraints:
         self.hxx = dh[3]
         self.hux = dh[4]
         self.huu = dh[5]
-        self.dh  = dh
+        self.dh  = tuple(dh)
 
     def get_derivatives(self):
-        """ return inequality constraints derivarives ufunction.
+        """ return equality constraints derivarives ufunction.
 
         Returns:
             dh (list): ufunc list of [h, hx, hu, hxx, hux, huu],\
             whose arguments are x, u, t
         """
-        return self.dh_sym[0].shape[0]
+        return self.dh
