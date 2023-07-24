@@ -10,13 +10,13 @@ class SymDynamics:
     
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
                  f: sym.Matrix):
-        """ Create Dynamics class. Derivatives are calculated via sym.
+        """ Create Dynamics class. Derivatives are calculated via sympy.
 
         Args:
             x (sym.Matrix): State vector.
             u (sym.Matrix): Control input vector.
             t (sym.Symbol): Time.
-            f (sym.Matrix): State equation, f(x, u, t)
+            f (sym.Matrix): State equation, f(x, u, t).
         """
         fx  = symutils.diff_vector(f, x)
         fu  = symutils.diff_vector(f, u)
@@ -72,7 +72,7 @@ class SymDynamics:
                               scalar_dict: dict=None, vector_dict: dict=None, 
                               matrix_dict: dict=None, dt: sym.Symbol=None,
                               dt_value: float=None,):
-        """ Substitute symbolic constatnts into specic values 
+        """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
             Args:
@@ -132,7 +132,7 @@ class NumDynamics:
         """ Return dynamics ufunction.
 
         Returns:
-            df (list) : ufunc list of [f, fx, fu, fxx, fux, fuu], 
+            df (list) : ufunc list of [f, fx, fu, fxx, fux, fuu], \
             whose arguments are x, u, t.
         """
         return self.df

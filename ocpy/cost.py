@@ -9,7 +9,7 @@ class SymCost:
     """
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
                  l: sym.Symbol, lf: sym.Symbol):    
-        """Symbolic Cost class.
+        """ Symbolic Cost class.
     
             Args:
                 x (sym.Matrix): State vector.
@@ -41,6 +41,7 @@ class SymCost:
                      lxx: sym.Matrix, lux: sym.Matrix, luu: sym.Matrix,
                      lf: sym.Symbol, lfx: sym.Matrix, lfxx: sym.Matrix):
         """ Initialize dynamics derivatives manually.
+
         Args:
             x (sym.Matrix): State vector.
             u (sym.Matrix): Control input vector.
@@ -68,8 +69,9 @@ class SymCost:
 
     def get_derivatives(self):
         """ Get derivatives of dynamics.
-            Returns:
-                dl (list): [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+
+        Returns:
+            dl (list): [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
         """
         return self.dl
 
@@ -105,7 +107,7 @@ class NumCost:
                  l_sym: sym.Matrix, lx_sym: sym.Matrix, lu_sym: sym.Matrix, 
                  lxx_sym: sym.Matrix, lux_sym: sym.Matrix, luu_sym: sym.Matrix,
                  lf_sym: sym.Matrix, lfx_sym: sym.Matrix, lfxx_sym: sym.Matrix):
-        """
+        """ Turn symbolic dynamics into fast universal function.
         Args:
             x (sym.Matrix): State vector.
             u (sym.Matrix): Control input vector.
@@ -145,7 +147,7 @@ class NumCost:
 
             Returns:
                 dl (list): ufunction list of 
-                [l_ufunc, lx_ufunc, lu_ufunc, lxx_ufunc, lux_ufunc,  luu_ufunc,
+                [l_ufunc, lx_ufunc, lu_ufunc, lxx_ufunc, lux_ufunc,  luu_ufunc, \
                  lf_ufunc, lfx_ufunc, lfxx_ufunc]
         """
         return self.dl
