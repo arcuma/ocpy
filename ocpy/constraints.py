@@ -5,7 +5,7 @@ from ocpy import symutils
 
 
 class SymIneqConstraints:
-    """ Create inequality constraints class. Derivatives are calculated via sympy.
+    """ Symbolic inequality constraints class.
     """
 
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, g: sym.Matrix):
@@ -105,8 +105,8 @@ class NumIneqConstraints:
         """ Turn symbolic inequality constraints into fast universal function.
 
         Args:
-            x (sym.Matrix): state vector.
-            u (sym.Matrix): control input vector.
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
             t (sym.Symbol): Time.
             g_sym (sym.Matrix): Stack of inequality constraints. g(x, u, t) <= 0.
             gx_sym (sym.Matrix): Derivative of g w.r.t. state x.
@@ -135,7 +135,7 @@ class NumIneqConstraints:
         self.dg  = tuple(dg)
 
     def get_derivatives(self):
-        """ Return inequality constraints derivarives ufunction.
+        """ Return lambdified functions of derivatives of inequality constraints.
 
         Returns:
             dg (tuple): (g, gx, gu, gxx, gux, guu)
@@ -144,7 +144,7 @@ class NumIneqConstraints:
     
 
 class SymEqConstraints:
-    """ Create equality constraints class. Derivatives are calculated via sympy.
+    """ Symbolic equality constraints class.
     """
 
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, h: sym.Matrix):
@@ -270,7 +270,7 @@ class NumEqConstraints:
         self.dh  = tuple(dh)
 
     def get_derivatives(self):
-        """ Return equality constraints derivarives ufunction.
+        """ Return lambdified functions of derivatives of equality constraints.
 
         Returns:
             dh (tuple): (h, hx, hu, hxx, hux, huu).

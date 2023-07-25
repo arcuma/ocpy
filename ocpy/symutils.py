@@ -217,7 +217,8 @@ def substitute_constants_list(
 
 def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
              dim_reduction=True, numba_njit=True):
-    """ call sym.lambdify to transform funciton into fast numpy ufunc.
+    """ call sym.lambdify() to convert symbolic funciton into \
+        fast numerical function.
 
     Args:
         args (list) : Arguments of function f. 
@@ -225,10 +226,10 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
         f (sym symbol or matrix) : Function.
         dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transformed \
             into 1d ndarray.
-        numba_njit (bool=True): If true, ufunc is wrapped by numba.njit.
+        numba_njit (bool=True): If true, function is wrapped by numba.njit.
             
     Returns:
-        f_ufunc : numpy ufunc.
+        f_num (lambdifygenerated) : Fast lambda function.
     """
     f = copy.copy(f)
     if numba_njit:
@@ -241,8 +242,8 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
                 if n == 1:
                     f = f.T
                 f = sym.Array(f)[0]
-                f_numpy = sym.lambdify(args, f, modules='numpy')
-                return njit(f_numpy)
+                f_num = sym.lambdify(args, f, modules='numpy')
+                return njit(f_num)
                 # expired
                 # f_numpy = lambda *args: np.array(f_list_njit(*args))
                 # return njit(f_numpy)
@@ -253,10 +254,10 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
             f += 1e-128 * np.ones((l, m, n))
             f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
             # for 3D array, this operation is needed to turn into ndarray.
-            f_numpy = lambda *args: np.array(f_list_njit(*args))
-            return njit(f_numpy)
-        f_numpy = sym.lambdify(args, f, modules='numpy')
-        return njit(f_numpy)
+            f_num = lambda *args: np.array(f_list_njit(*args))
+            return njit(f_num)
+        f_num = sym.lambdify(args, f, modules='numpy')
+        return njit(f_num)
     else:
         if isinstance(f, sym.Matrix):
             m, n = f.shape
@@ -266,20 +267,20 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
                     f = f.T
                 f = sym.Array(f)[0]
                 f = sym.lambdify(args, f, "numpy")
-                # unless this operation, f_ufunc returns list, not ndarray. 
-                f_ufunc = lambda *args: np.array(f(*args))
-                return f_ufunc
+                # unless this operation, f_num returns list, not ndarray. 
+                f_num = lambda *args: np.array(f(*args))
+                return f_num
         elif isinstance(f, sym.Array):
             f = sym.lambdify(args, f, "numpy")
-            f_ufunc = lambda *args: np.array(f(*args))
-            return f_ufunc
-        f_ufunc = sym.lambdify(args, f, "numpy")
-        return f_ufunc
+            f_num = lambda *args: np.array(f(*args))
+            return f_num
+        f_num = sym.lambdify(args, f, "numpy")
+        return f_num
 
 
 def lambdify_list(args: list, f_list: list, dim_reduction: bool=True,
                   numba_njit :bool=True):
-    """ Call sym.lambdify to transform funciton into fast numpy ufunc.
+    """ Call sym.lambdify to transform funciton into fast numpy function.
 
     Args:
         args (list) : Arguments of function f. \
@@ -287,11 +288,12 @@ def lambdify_list(args: list, f_list: list, dim_reduction: bool=True,
         f_list (list (sym symbol or matrix)) : list of functions.
         dim_reduction (bool=True): If true, m*1 or 1*n Matrix are transformed \
             into 1d ndarray.
-        numba_njit (bool=True): If true, ufunc is wrapped by numba.njit.
+        numba_njit (bool=True): If true, function is wrapped by numba.njit.
     Returns:
-        f_ufunc : numpy ufunc.
+        f_num_list (list) : Fast lambda function.
+
     """
-    ufunc_list = []
+    f_num_list = []
     for f in f_list:
-        ufunc_list.append(lambdify(args, f), dim_reduction, numba_njit)
-    return ufunc_list
+        f_num_list.append(lambdify(args, f), dim_reduction, numba_njit)
+    return f_num_list
