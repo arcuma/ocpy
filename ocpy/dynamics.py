@@ -64,29 +64,31 @@ class SymDynamics:
         """ Return derivatives of dynamics.
 
             Returns:
-                df (list):[f, fx, fu, fxx, fux, fuu]
+                df (tuple): (f, fx, fu, fxx, fux, fuu)
         """
         return self.df
 
-    def substitute_constatnts(self, df_sym: list,
+    def substitute_constatnts(self,
                               scalar_dict: dict=None, vector_dict: dict=None, 
                               matrix_dict: dict=None, dt: sym.Symbol=None,
-                              dt_value: float=None,):
+                              dt_value: float=None):
         """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
             Args:
-                df_sym (list): derivatives of f, [f, fx, fu, fxx, fux, fuu].
                 scalar_dict (dict) : {"name": (symbol, value)}) 
                 vector_dict (dict) : {"name": (symbol, value)}) 
-                matrix_dict (dict) : {"name": (symbol, value)}) 
+                matrix_dict (dict) : {"name": (symbol, value)})
+                dt (sym.Symbol): Discretization step.
+                dt_value (float): Value of dt.
             Returns:
-                df_subs (list) : constants-substituted symbolic
+                df_subs (tuple) : constants-substituted symbolic
                     dynamics derivatives.
         """
-        self.df_subs = symutils.substitute_constants_list(
+        df_subs = symutils.substitute_constants_list(
             self.df, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
+        self.df_subs = tuple(df_subs)
         return self.df_subs
 
 
@@ -113,11 +115,10 @@ class NumDynamics:
         Note:
             Confirm all symbolic constants (e.g. mass, lentgth,) are substituted.
         """
-        args = [x, u, t, dt]
         df_sym = [f_sym, fx_sym, fu_sym, fxx_sym, fux_sym, fuu_sym]
         df = []
         for i, func_sym in enumerate(df_sym):
-            args = [x, u, t, dt]
+            args = [x, u, t]
             dim_reduction = True if i == 0 else False
             df.append(symutils.lambdify(args, func_sym, dim_reduction))        
         self.f   = df[0]
@@ -132,7 +133,9 @@ class NumDynamics:
         """ Return dynamics ufunction.
 
         Returns:
-            df (list) : ufunc list of [f, fx, fu, fxx, fux, fuu], \
-            whose arguments are x, u, t.
+            df (tuple) : (f, fx, fu, fxx, fux, fuu)
+            
+        Note:
+            Arguments of f are [x, u, t].
         """
         return self.df

@@ -60,8 +60,8 @@ class SymIneqConstraints:
     def get_derivatives(self):
         """ Return derivatives of inequality constraints.
 
-            Returns:
-                dg (list):[g, gx, gu, gxx, gux, guu]
+        Returns:
+            dg (tuple): (g, gx, gu, gxx, gux, guu)
         """
         return self.dg
     
@@ -77,18 +77,19 @@ class SymIneqConstraints:
         """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
-            Args:
-                dg_sym (list): derivatives of g. [g, gx, gu, gxx, gux, guu].
-                scalar_dict (dict) : {"name": (symbol, value)}) 
-                vector_dict (dict) : {"name": (symbol, value)}) 
-                matrix_dict (dict) : {"name": (symbol, value)}) 
-            Returns:
-                dg_subs (list) : constants-substituted symbolic \
-                    inequality constraints derivatives.
+        Args:
+            dg_sym (tuple): derivatives of g. [g, gx, gu, gxx, gux, guu].
+            scalar_dict (dict) : {"name": (symbol, value)}) 
+            vector_dict (dict) : {"name": (symbol, value)}) 
+            matrix_dict (dict) : {"name": (symbol, value)}) 
+        Returns:
+            dg_subs (tuple) : constants-substituted symbolic \
+                inequality constraints derivatives.
         """
-        self.dg_subs = symutils.substitute_constants_list(
+        dg_subs = symutils.substitute_constants_list(
             self.dg, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
+        self.dg_subs = tuple(dg_subs)
         return self.dg_subs
 
 
@@ -134,11 +135,10 @@ class NumIneqConstraints:
         self.dg  = tuple(dg)
 
     def get_derivatives(self):
-        """ return inequality constraints derivarives ufunction.
+        """ Return inequality constraints derivarives ufunction.
 
         Returns:
-            dg (list): ufunc list of [g, gx, gu, gxx, gux, guu],\
-            whose arguments are x, u, t
+            dg (tuple): (g, gx, gu, gxx, gux, guu)
         """
         return self.dg
     
@@ -195,8 +195,8 @@ class SymEqConstraints:
     def get_derivatives(self):
         """ Return derivatives of equality constraints.
 
-            Returns:
-                dg (list):[h, hx, hu, hxx, hux, huu]
+        Returns:
+            dg (tuple): (h, hx, hu, hxx, hux, huu).
         """
         return self.dh
     
@@ -212,25 +212,26 @@ class SymEqConstraints:
         """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
-            Args:
-                dh_sym (list): derivatives of h, [h, hx, hu, hxx, hux, huu].
-                scalar_dict (dict) : {"name": (symbol, value)}) 
-                vector_dict (dict) : {"name": (symbol, value)}) 
-                matrix_dict (dict) : {"name": (symbol, value)}) 
-            Returns:
-                dh_subs (list) : constants-substituted symbolic
-                    equality constraints derivatives.
+        Args:
+            scalar_dict (dict) : {"name": (symbol, value)}) 
+            vector_dict (dict) : {"name": (symbol, value)}) 
+            matrix_dict (dict) : {"name": (symbol, value)}) 
+            dt (sym.Symbol): Discretization step.
+            dt_value (float): Value of dt.
+        Returns:
+            dh_subs (tuple) : constants-substituted symbolic
+                equality constraints derivatives.
         """
-        self.dh_subs = symutils.substitute_constants_list(
+        dh_subs = symutils.substitute_constants_list(
             self.dh, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
+        self.dh_subs = tuple(dh_subs)
         return self.dh_subs
 
 
 class NumEqConstraints:
     """ Generate numerical function of equality constraints \
         from symbolic expression.
-
     """
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, dt: sym.Symbol,
                  h_sym: sym.Matrix, hx_sym: sym.Matrix, hu_sym: sym.Matrix,
@@ -269,10 +270,9 @@ class NumEqConstraints:
         self.dh  = tuple(dh)
 
     def get_derivatives(self):
-        """ return equality constraints derivarives ufunction.
+        """ Return equality constraints derivarives ufunction.
 
         Returns:
-            dh (list): ufunc list of [h, hx, hu, hxx, hux, huu],\
-            whose arguments are x, u, t
+            dh (tuple): (h, hx, hu, hxx, hux, huu).
         """
         return self.dh
