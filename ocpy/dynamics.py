@@ -5,7 +5,7 @@ from ocpy import symutils
 
 
 class SymDynamics:
-    """ Create Dynamics class. Derivatives are calculated via sym.
+    """ Symbolic dynamics class.
     """
     
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol,
@@ -75,15 +75,16 @@ class SymDynamics:
         """ Substitute symbolic constatnts into specic values \
                 for numerical calculation.
 
-            Args:
-                scalar_dict (dict) : {"name": (symbol, value)}) 
-                vector_dict (dict) : {"name": (symbol, value)}) 
-                matrix_dict (dict) : {"name": (symbol, value)})
-                dt (sym.Symbol): Discretization step.
-                dt_value (float): Value of dt.
-            Returns:
-                df_subs (tuple) : constants-substituted symbolic
-                    dynamics derivatives.
+        Args:
+            scalar_dict (dict) : {"name": (symbol, value)}) 
+            vector_dict (dict) : {"name": (symbol, value)}) 
+            matrix_dict (dict) : {"name": (symbol, value)})
+            dt (sym.Symbol): Discretization step.
+            dt_value (float): Value of dt.
+            
+        Returns:
+            df_subs (tuple) : constants-substituted symbolic
+                dynamics derivatives.
         """
         df_subs = symutils.substitute_constants_list(
             self.df, scalar_dict, vector_dict, matrix_dict, dt, dt_value
@@ -130,7 +131,7 @@ class NumDynamics:
         self.df  = tuple(df)
     
     def get_derivatives(self):
-        """ Return dynamics ufunction.
+        """ Return lambdified functions of derivatives of dynamics.
 
         Returns:
             df (tuple) : (f, fx, fu, fxx, fux, fuu)

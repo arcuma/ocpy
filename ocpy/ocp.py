@@ -55,10 +55,10 @@ class OCP:
         self._dh_subs = None
         self._num_dynamics = None
         self._num_cost = None
-        self._df_ufunc = None
-        self._dl_ufunc = None
-        self._dg_ufunc = None
-        self._dh_ufunc = None
+        self._df_num = None
+        self._dl_num = None
+        self._dg_num = None
+        self._dh_num = None
         self._is_lambdified = False
 
     def define(
@@ -160,8 +160,8 @@ class OCP:
         self._df_sym = df_sym
         self._dl_sym = dl_sym
         self._is_ocp_defined = True
-        # generate ufunc
-        self.lambdify()
+        # generate num
+        self._lambdify()
 
     def define_unconstrained(self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
                T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
@@ -187,7 +187,7 @@ class OCP:
                     us_guess=us_guess, is_continuous=is_continuous, 
                     simplification=simplification)
 
-    def lambdify(self) -> tuple[list, list]:
+    def _lambdify(self) -> tuple[list, list]:
         """ Generate sympy symbolic expression into numpy function.\
 
         Returns:
@@ -204,13 +204,13 @@ class OCP:
             self._df_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_dynamics = NumDynamics(x, u, t, dt, *df_subs)
-        df_ufunc = num_dynamics.get_derivatives()
+        df_num = num_dynamics.get_derivatives()
         # cost
         dl_subs = symutils.substitute_constants_list(            
             self._dl_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_cost = NumCost(x, u, t, dt, *dl_subs)
-        dl_ufunc = num_cost.get_derivatives()
+        dl_num = num_cost.get_derivatives()
         # inequality constraints
         if self._has_ineq_constraints:
             dg_subs = symutils.substitute_constants_list(
@@ -220,10 +220,10 @@ class OCP:
             num_ineq_constraints = NumIneqConstraints(
                 x, u, t, dt, *dg_subs
                 )
-            dg_ufunc = num_ineq_constraints.get_derivatives()
+            dg_num = num_ineq_constraints.get_derivatives()
             self._dg_subs = dg_subs
             self._num_ineq_constrants = num_ineq_constraints
-            self._dg_ufunc = dg_ufunc
+            self._dg_num = dg_num
         # equality constraints
         if self._has_eq_constraints:
             dh_subs = symutils.substitute_constants_list(
@@ -233,17 +233,17 @@ class OCP:
             num_eq_constraints = NumEqConstraints(
                 x, u, t, dt, *dh_subs
                 )
-            dh_ufunc = num_eq_constraints.get_derivatives()
+            dh_num = num_eq_constraints.get_derivatives()
             self._dh_subs = dh_subs
             self._num_eq_constrants = num_eq_constraints
-            self._dh_ufunc = dh_ufunc
+            self._dh_num = dh_num
         # hold
         self._df_subs = df_subs
         self._num_dynamics = num_dynamics
-        self._df_ufunc = df_ufunc
+        self._df_num = df_num
         self._dl_subs = dl_subs
         self._num_cost = num_cost
-        self._dl_ufunc = dl_ufunc
+        self._dl_num = dl_num
         self._is_lambdified = True
 
     def reset_parameters(self, t0: float, T: float, N: int,
@@ -265,7 +265,7 @@ class OCP:
         self.reset_x0(x0)
         self.reset_us_guess(us_guess)
         # for dt_value being changed.
-        self.lambdify()
+        self._lambdify()
 
     def reset_x0(self, x0: np.ndarray | list) -> np.ndarray:
         """ Reset x0. If list is given, transformed into ndarray.
@@ -370,7 +370,7 @@ class OCP:
         assert self._is_lambdified
         return self._dh_subs
 
-    # ufunc
+    # num
     def get_df(self) -> tuple:
         """ Return derivatives of dynamics.
 
@@ -378,7 +378,7 @@ class OCP:
             tuple (f, fx, fu, fxx, fux, fuu)
         """
         assert self._is_lambdified
-        return self._df_ufunc
+        return self._df_num
     
     def get_dl(self) -> tuple:
         """ Return derivatives of cost.
@@ -387,7 +387,7 @@ class OCP:
             tuple (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         """
         assert self._is_lambdified
-        return self._dl_ufunc
+        return self._dl_num
 
     def get_dg(self) -> tuple:
         """ Return derivatives of inequality constraints.
@@ -396,7 +396,7 @@ class OCP:
             tuple (g, gx, gu, gxx, gux, guu)
         """
         assert self._is_lambdified
-        return self._dg_ufunc
+        return self._dg_num
 
     def get_dh(self) -> tuple:
         """ Return derivatives of equality constraints.
@@ -405,7 +405,7 @@ class OCP:
             tuple (h, hx, hu, hxx, hux, huu)
         """
         assert self._is_lambdified
-        return self._dh_ufunc
+        return self._dh_num
     
     def get_ocp_name(self) -> str:
         return self._ocp_name

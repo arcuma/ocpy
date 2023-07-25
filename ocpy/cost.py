@@ -102,7 +102,7 @@ class SymCost:
         return self.dl_subs
 
 class NumCost:
-    """ Turn symbolic dynamics into fast universal function.
+    """ Turn symbolic dynamics into fast numerical function.
     """
     def __init__(self, x: sym.Matrix, u: sym.Matrix, t: sym.Symbol, dt: sym.Symbol,
                  l_sym: sym.Matrix, lx_sym: sym.Matrix, lu_sym: sym.Matrix, 
@@ -144,12 +144,12 @@ class NumCost:
         self.dl   = tuple(dl)
 
     def get_derivatives(self):
-        """ Return dynamics ufunction.
+        """ Return lambdified functions of derivatives of costs.
 
-            Returns:
-                dl (tuple): (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
-            
-            Note:
-                Arguments of l are [x, u, t], and of lf are [x, t].
+        Returns:
+            dl (tuple): (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
+        
+        Note:
+            Arguments of l are [x, u, t], and of lf are [x, t].
         """
         return self.dl
