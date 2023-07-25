@@ -31,7 +31,7 @@ class SolverBase(abc.ABC):
         """
         self._log_dir = log_dir
 
-    def get_log_directory(self):
+    def get_log_directory(self) -> str:
         """ Get directory path of data are logged.
         """
         return self._log_dir
@@ -44,7 +44,7 @@ class SolverBase(abc.ABC):
 
     @abc.abstractmethod
     def reset_initial_conditions(self):
-        """ Reset t0, x0, initial guess of us and so.
+        """ Reset t0, x0, initial guess of us, etc.
         """
         pass
 

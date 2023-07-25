@@ -39,8 +39,8 @@ class DDPSolver(SolverBase):
         self._x0 = ocp.get_x0()
         self._us_guess = ocp.get_us_guess()
         # solver parameters
-        self._max_iter = 200
-        self._alphas = np.array([0.5**i for i in range(8)] + [0])
+        self._max_iter = 500
+        self._alphas = np.array([0.5**i for i in range(8)])
         self._damp_init = 1.0
         self._damp_min = 1e-5
         self._damp_max = 1e5
@@ -57,7 +57,7 @@ class DDPSolver(SolverBase):
             self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, 
             self._lf, self._lfx, self._lfxx,
             self._t0, self._x0, self._us_guess, self._N, self._T, self._dt,
-            1 , self._alphas, self._damp_init, self._damp_min, 
+            5 , self._alphas, self._damp_init, self._damp_min, 
             self._damp_max, self._stop_threshold 
         )
 
@@ -66,7 +66,7 @@ class DDPSolver(SolverBase):
         """
         return self._ocp
 
-    def get_log_directory(self):
+    def get_log_directory(self) -> str:
         """ Return directory path where logs are saved.
         """
         return self._log_dir
@@ -78,7 +78,7 @@ class DDPSolver(SolverBase):
 
     def reset_initial_conditions(self, x0: np.ndarray, us_guess: np.ndarray,
                                  t0: float):
-        """ reset t0, x0, and initial guess of us_guess.
+        """ Reset t0, x0, and initial guess of us_guess.
         """
         self._x0 = np.ndarray(x0, dtype=float)
         self._us_guess = np.ndarray(us_guess, dtype=float)
@@ -160,6 +160,7 @@ class DDPSolver(SolverBase):
         # log
         if log:
             self.log_data(self._log_dir, ts, xs, us, Js)
+        # plot
         if plot:
             self.plot_data(self._log_dir, ts, xs, us, Js)
         return ts, xs, us, Js
@@ -178,7 +179,7 @@ class DDPSolver(SolverBase):
                 with cost is calculated.
 
             Args:
-                f (function): Discrete state equation. x_k+1 = f(x_k, u_k).
+                f (function): State equation.
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
                 x0 (np.ndarray): Initial state.
@@ -193,8 +194,8 @@ class DDPSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t, dt)
-                J += l(xs[i], us[i], t, dt)
+                xs[i + 1] = xs[i] + f(xs[i], us[i], t) * dt
+                J += l(xs[i], us[i], t) * dt
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -226,16 +227,18 @@ class DDPSolver(SolverBase):
             """ Backward pass of DDP.
 
             Args:
-                fx (function):
-                fu (function):
-                fxx (function):
-                fux (function):
-                fuu (function):
-                lx (function):
-                lu (function):
-                lxx (function):
-                lux (function):
-                luu (function):
+                fx (function): Derivative of f w.r.t. state x.
+                fu (function): Derivative of f w.r.t. state u.
+                fxx (function): Derivative of f w.r.t. state x and x.
+                fux (function): Derivative of f w.r.t. state x and u.
+                fuu (function): Derivative of f w.r.t. state u and u.
+                lx (function): Derivative of l w.r.t. state x.
+                lu (function): Derivative of l w.r.t. state u.
+                lxx (function): Derivative of l w.r.t. state x and x.
+                lux (function): Derivative of l w.r.t. state u and x.
+                luu (function): Derivative of l w.r.t. state u and u.
+                lfx (function): Derivative of lf w.r.t. state x.
+                lfxx (function): Derivative of l w.r.t. state x and x.
                 xs (numpy.ndarray): Nominal state trajectory.\
                     Size must be (N+1)*n_u.
                 us (numpy.ndarray): Nominalcontrol trajectory.\
@@ -253,6 +256,7 @@ class DDPSolver(SolverBase):
             T = N * dt
             n_x = xs.shape[1]
             n_u = us.shape[1]
+            I = np.eye(n_x)
             # feedforward term and feedback coeff.
             ks = np.empty((N, n_u))
             Ks = np.empty((N, n_u, n_x))
@@ -264,22 +268,20 @@ class DDPSolver(SolverBase):
             # daming matrix
             Reg = damp * np.eye(n_u)
             for i in range(N - 1, -1, -1):
+                # t, x and u at satge i
                 t = t0 + i*dt
-                # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t, dt)
-                fu_i = fu(x, u, t, dt)
-                fxx_i = fxx(x, u, t, dt)
-                fux_i = fux(x, u, t, dt)
-                fuu_i = fuu(x, u, t, dt)
-                lx_i = lx(x, u, t, dt)
-                lu_i = lu(x, u, t, dt)
-                lxx_i = lxx(x, u, t, dt)
-                lux_i = lux(x, u, t, dt)
-                luu_i = luu(x, u, t, dt)
-                lfx_i = lfx(x, t)
-                lfxx_i = lfxx(x, t)
+                fx_i = I + fx(x, u, t) * dt
+                fu_i = fu(x, u, t) * dt
+                fxx_i = fxx(x, u, t) * dt
+                fux_i = fux(x, u, t) * dt
+                fuu_i = fuu(x, u, t) * dt
+                lx_i = lx(x, u, t) * dt
+                lu_i = lu(x, u, t) * dt
+                lxx_i = lxx(x, u, t) * dt
+                lux_i = lux(x, u, t) * dt
+                luu_i = luu(x, u, t) * dt
                 # action value derivatives
                 Qx = lx_i + fx_i.T @ Vx
                 Qu = lu_i + fu_i.T @ Vx
@@ -309,14 +311,14 @@ class DDPSolver(SolverBase):
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
                 xs (numpy.ndarray): Nominal state trajectory.\
-                    size must be (N+1)*n_u
+                    Size must be (N+1)*n_u
                 us (numpy.ndarray): Nominal control trajectory.\
-                    size must be N*n_u
+                    Size must be N*n_u
                 t0 (float): Initial time.
                 dt (float): Discrete time step.
                 ks (numpy.ndarray): Series of k. Size must be N * n_u.
                 Ks (numpy.ndarray): Series of K. Size must be N * (n_u * n_x).
-                alpha (float): step Size of line search. 0<= alpha <= 1.0.
+                alpha (float): step Size of line search. 0 <= alpha <= 1.0.
 
             Returns:
                 xs_new (numpy.ndarray): New state trajectory.
@@ -325,7 +327,7 @@ class DDPSolver(SolverBase):
             """
             N = us.shape[0]
             T = N * dt
-            # new (xs, us) and cost
+            # new (xs, us) and cost value.
             xs_new = np.empty(xs.shape)
             xs_new[0] = xs[0]
             us_new = np.empty(us.shape)
@@ -333,8 +335,8 @@ class DDPSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
-                J_new += l(xs_new[i], us_new[i], t, dt)
+                xs_new[i + 1] = xs_new[i] +  f(xs_new[i], us_new[i], t) * dt
+                J_new += l(xs_new[i], us_new[i], t) * dt
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
@@ -348,13 +350,11 @@ class DDPSolver(SolverBase):
         damp = damp_init
         # main iteration
         for iters in range(max_iter):
-            # print(f'iters: {iters}')
             # backward pass
             ks, Ks, Delta_V = backward_pass(
                 fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, damp
             )
-            # print('DeltaV: ',Delta_V)      
             if np.abs(Delta_V) < stop_threshold:
                 is_success = True
                 break
@@ -368,7 +368,6 @@ class DDPSolver(SolverBase):
                 xs_new, us_new, J_new = forward_pass(
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
-                # print(f'iters: {iters}, alpha: {alpha}, J: {J}, J_new: {J_new}')
                 if J_new < J:
                     # line search success
                     xs = xs_new
@@ -425,7 +424,7 @@ class DDPSolver(SolverBase):
     @staticmethod
     def plot_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
                   Js: np.ndarray):
-        """ Ulot data and save it.
+        """ Plot data and save it.
         
         Args:
             log_dir (str): Directory where data are saved.
@@ -466,8 +465,8 @@ class iLQRSolver(SolverBase):
         self._x0 = ocp.get_x0()
         self._us_guess = ocp.get_us_guess()
         # solver parameters
-        self._max_iter = 200
-        self._alphas = np.array([0.5**i for i in range(8)] + [0])
+        self._max_iter = 500
+        self._alphas = np.array([0.5**i for i in range(8)])
         self._damp_init = 1.0
         self._damp_min = 1e-5
         self._damp_max = 1e5
@@ -486,8 +485,8 @@ class iLQRSolver(SolverBase):
             self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, 
             self._lf, self._lfx, self._lfxx,
             self._t0, self._x0, self._us_guess, self._N, self._T, self._dt,
-            1 , self._alphas, self._damp_init, self._damp_min, 
-            self._damp_max, self._stop_threshold 
+            5 , self._alphas, self._damp_init, self._damp_min, 
+            self._damp_max, self._stop_threshold
         )
 
     def ocp(self):
@@ -495,7 +494,7 @@ class iLQRSolver(SolverBase):
         """
         return self._ocp
 
-    def get_log_directory(self):
+    def get_log_directory(self) -> str:
         """ Return directory path where logs are saved.
         """
         return self._log_dir
@@ -507,7 +506,7 @@ class iLQRSolver(SolverBase):
 
     def reset_initial_conditions(self, x0: np.ndarray, us_guess: np.ndarray,
                                  t0: float):
-        """ reset t0, x0, and initial guess of us_guess.
+        """ Reset t0, x0, and initial guess of us_guess.
         """
         self._x0 = np.ndarray(x0, dtype=float)
         self._us_guess = np.ndarray(us_guess, dtype=float)
@@ -538,6 +537,7 @@ class iLQRSolver(SolverBase):
             self._damp_max = damp_max
         if stop_threshold is not None:
             self._stop_threshold = stop_threshold
+
     def solve(self, result=True , log=False, plot=False):
         """ Solve OCP via iLQR iteration.
 
@@ -588,6 +588,7 @@ class iLQRSolver(SolverBase):
         # log
         if log:
             self.log_data(self._log_dir, ts, xs, us, Js)
+        # plot
         if plot:
             self.plot_data(self._log_dir, ts, xs, us, Js)
         return ts, xs, us, Js
@@ -606,7 +607,7 @@ class iLQRSolver(SolverBase):
                 with cost is calculated.
 
             Args:
-                f (function): Discrete state equation. x_k+1 = f(x_k, u_k).
+                f (function): State equation.
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
                 x0 (np.ndarray): Initial state.
@@ -621,8 +622,8 @@ class iLQRSolver(SolverBase):
             J = 0.0
             for i in range(N):
                 t = t0 + i*dt
-                xs[i + 1] = f(xs[i], us[i], t, dt)
-                J += l(xs[i], us[i], t, dt)
+                xs[i + 1] = xs[i] + f(xs[i], us[i], t) * dt
+                J += l(xs[i], us[i], t) * dt
             t = t0 + i*N
             J += lf(xs[N], t)
             return xs, J
@@ -634,13 +635,15 @@ class iLQRSolver(SolverBase):
             """ Backward pass of iLQR.
 
             Args:
-                fx (function):
-                fu (function):
-                lx (function):
-                lu (function):
-                lxx (function):
-                lux (function):
-                luu (function):
+                fx (function): Derivative of f w.r.t. state x.
+                fu (function): Derivative of f w.r.t. state u.
+                lx (function): Derivative of l w.r.t. state x.
+                lu (function): Derivative of l w.r.t. state u.
+                lxx (function): Derivative of l w.r.t. state x and x.
+                lux (function): Derivative of l w.r.t. state u and x.
+                luu (function): Derivative of l w.r.t. state u and u.
+                lfx (function): Derivative of lf w.r.t. state x.
+                lfxx (function): Derivative of l w.r.t. state x and x.
                 xs (numpy.ndarray): Nominal state trajectory.\
                     Size must be (N+1)*n_u.
                 us (numpy.ndarray): Nominalcontrol trajectory.\
@@ -658,6 +661,7 @@ class iLQRSolver(SolverBase):
             T = N * dt
             n_x = xs.shape[1]
             n_u = us.shape[1]
+            I = np.eye(n_x)
             # feedforward term and feedback coeff.
             ks = np.empty((N, n_u))
             Ks = np.empty((N, n_u, n_x))
@@ -669,25 +673,23 @@ class iLQRSolver(SolverBase):
             # daming matrix
             Reg = damp * np.eye(n_u)
             for i in range(N - 1, -1, -1):
+                # t, x and u at satge i
                 t = t0 + i*dt
-                # x and u at satge i
                 x, u = xs[i], us[i]
                 # derivatives of stage i
-                fx_i = fx(x, u, t, dt)
-                fu_i = fu(x, u, t, dt)
-                lx_i = lx(x, u, t, dt)
-                lu_i = lu(x, u, t, dt)
-                lxx_i = lxx(x, u, t, dt)
-                lux_i = lux(x, u, t, dt)
-                luu_i = luu(x, u, t, dt)
-                lfx_i = lfx(x, t)
-                lfxx_i = lfxx(x, t)
+                fx_i = I + fx(x, u, t) * dt
+                fu_i = fu(x, u, t) * dt
+                lx_i = lx(x, u, t) * dt
+                lu_i = lu(x, u, t) * dt
+                lxx_i = lxx(x, u, t) * dt
+                lux_i = lux(x, u, t) * dt
+                luu_i = luu(x, u, t) * dt
                 # action value derivatives
                 Qx = lx_i + fx_i.T @ Vx
                 Qu = lu_i + fu_i.T @ Vx
-                Qxx = (lxx_i + fx_i.T @ Vxx @ fx_i)#.reshape((n_x, n_x))
-                Qux = (lux_i + fu_i.T @ Vxx @ fx_i)#.reshape((n_u, n_x))
-                Quu = (luu_i + fu_i.T @ Vxx @ fu_i)#.reshape((n_u, n_u))
+                Qxx = lxx_i + fx_i.T @ Vxx @ fx_i
+                Qux = lux_i + fu_i.T @ Vxx @ fx_i
+                Quu = luu_i + fu_i.T @ Vxx @ fu_i
                 # feedforward and feedback terms
                 Quu_inv = np.linalg.inv(Quu + Reg)
                 k = -Quu_inv @ Qu
@@ -727,7 +729,7 @@ class iLQRSolver(SolverBase):
             """
             N = us.shape[0]
             T = N * dt
-            # new (xs, us) and cost
+            # new (xs, us) and cost value.
             xs_new = np.empty(xs.shape)
             xs_new[0] = xs[0]
             us_new = np.empty(us.shape)
@@ -735,8 +737,8 @@ class iLQRSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = f(xs_new[i], us_new[i], t, dt)
-                J_new += l(xs_new[i], us_new[i], t, dt)
+                xs_new[i + 1] = xs_new[i] + f(xs_new[i], us_new[i], t) * dt
+                J_new += l(xs_new[i], us_new[i], t) * dt
             # terminal cost
             J_new += lf(xs_new[N], t + T)
             return xs_new, us_new, J_new
@@ -750,13 +752,11 @@ class iLQRSolver(SolverBase):
         damp = damp_init
         # main iteration
         for iters in range(max_iter):
-            # print(f'iters: {iters}')
             # backward pass
             ks, Ks, Delta_V = backward_pass(
                 fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, damp
             )
-            # print('DeltaV: ',Delta_V)      
             if np.abs(Delta_V) < stop_threshold:
                 is_success = True
                 break
@@ -770,7 +770,6 @@ class iLQRSolver(SolverBase):
                 xs_new, us_new, J_new = forward_pass(
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
-                # print(f'iters: {iters}, alpha: {alpha}, J: {J}, J_new: {J_new}')
                 if J_new < J:
                     # line search success
                     xs = xs_new
@@ -827,7 +826,7 @@ class iLQRSolver(SolverBase):
     @staticmethod
     def plot_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
                   Js: np.ndarray):
-        """ Ulot data and save it.
+        """ Plot data and save it.
         
         Args:
             log_dir (str): Directory where data are saved.

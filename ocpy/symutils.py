@@ -211,7 +211,7 @@ def substitute_constants_list(
     functions_subs = []
     for f in func_list:
         functions_subs.append(substitute_constants(f, scalar_dict, vector_dict,
-                                                    matrix_dict, dt, dt_value))
+                                                   matrix_dict, dt, dt_value))
     return functions_subs
 
 
@@ -230,6 +230,7 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
     Returns:
         f_ufunc : numpy ufunc.
     """
+    f = copy.copy(f)
     if numba_njit:
         if isinstance(f, sym.Matrix):
             m, n = f.shape
