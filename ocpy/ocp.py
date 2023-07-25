@@ -107,12 +107,12 @@ class OCP:
             lf = lf[0, 0]
         # symbolic derivatives of dynamics and cost.
         if is_continuous:
-            # discretize by Forward-Euler method.
-            sym_dynamics = SymDynamics(x, u, t, x + f * dt)
-            sym_cost = SymCost(x, u, t, l * dt, lf)
-        else:
-            sym_dynamics = SymDynamics(x, u, t, f) 
+            sym_dynamics = SymDynamics(x, u, t, f)
             sym_cost = SymCost(x, u, t, l, lf)
+        else:
+            # if discrete, regard it discretized by forward-Euler method.
+            sym_dynamics = SymDynamics(x, u, t, (f - x) / dt)
+            sym_cost = SymCost(x, u, t, l / dt, lf)
         # f, fx, fu, fxx, fux, fuu
         df_sym = sym_dynamics.get_derivatives()
         # l, lx, lu, lxx, lux, luu, lf, lfx, lfxx
@@ -145,7 +145,7 @@ class OCP:
             if self._has_eq_constraints:
                 symutils.simplify(dh_sym)
         # hold
-        self._T = T
+        self._T = float(T)
         self._N = N
         self._dt_value = T / N
         self._t0 = t0
@@ -191,8 +191,8 @@ class OCP:
         """ Generate sympy symbolic expression into numpy function.\
 
         Returns:
-            tuple: (df, dl) = ([f, fx, fu, fxx, fux, fuu], \
-                [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx])
+            tuple: (df, dl) = ((f, fx, fu, fxx, fux, fuu), \
+                (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx))
         """
         assert self._is_ocp_defined
         x = self._x
@@ -202,13 +202,13 @@ class OCP:
         # dynamics
         df_subs = symutils.substitute_constants_list(
             self._df_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
-            ) #self._dt, self._dt_value)
+            self._dt, self._dt_value)
         num_dynamics = NumDynamics(x, u, t, dt, *df_subs)
         df_ufunc = num_dynamics.get_derivatives()
         # cost
         dl_subs = symutils.substitute_constants_list(            
             self._dl_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
-            ) #self._dt, self._dt_value)
+            self._dt, self._dt_value)
         num_cost = NumCost(x, u, t, dt, *dl_subs)
         dl_ufunc = num_cost.get_derivatives()
         # inequality constraints
@@ -295,114 +295,114 @@ class OCP:
         return us_guess
 
     # symbolic
-    def get_df_symbolic(self) -> list:
+    def get_df_symbolic(self) -> tuple:
         """ Return symbolic derivatives of dynamics.
 
         Returns:
-            list: [f, fx, fu, fxx, fux, fuu]
+            tuple: (f, fx, fu, fxx, fux, fuu)
         """
         assert self._is_ocp_defined
         return self._df_sym
     
-    def get_dl_symbolic(self) -> list:
+    def get_dl_symbolic(self) -> tuple:
         """ Return symbolic derivatives of costs.
 
         Returns:
-            list: [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+            tuple: (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         """
         assert self._is_ocp_defined
         return self._dl_sym
     
-    def get_dg_symbolic(self) -> list:
+    def get_dg_symbolic(self) -> tuple:
         """ Return symbolic derivatives of inequality constraints.
 
         Returns:
-            list: [g, gx, gu, gxx, gux, guu]
+            tuple: (g, gx, gu, gxx, gux, guu)
         """
         assert self._is_ocp_defined
         return self._dg_sym
 
-    def get_dh_symbolic(self) -> list:
+    def get_dh_symbolic(self) -> tuple:
         """ Return symbolic derivatives of equality constraints.
 
         Returns:
-            list: [h, hx, hu, hxx, hux, huu]
+            tuple: (h, hx, hu, hxx, hux, huu)
         """
         assert self._is_ocp_defined
         return self._dg_sym
     
     # constants-substituted symbolic
-    def get_df_symbolic_substituted(self) -> list:
+    def get_df_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives of dynamics.
 
         Returns:
-            list: [f, fx, fu, fxx, fux, fuu]
+            tuple: (f, fx, fu, fxx, fux, fuu)
         """
         assert self._is_lambdified
         return self._df_subs
 
-    def get_dl_symbolic_substituted(self) -> list:
+    def get_dl_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives of costs.
 
         Returns:
-            list: [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+            tuple: (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         """
         assert self._is_lambdified
         return self._dl_subs
 
-    def get_dg_symbolic_substituted(self) -> list:
+    def get_dg_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives \
             of inequality constraints.
 
         Returns:
-            list: [g, gx, gu, gxx, gux, guu]
+            tuple: (g, gx, gu, gxx, gux, guu)
         """
         assert self._is_lambdified
         return self._dg_subs
 
-    def get_dh_symbolic_substituted(self) -> list:
+    def get_dh_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives \
             equality constraints.
 
         Returns:
-            list: [h, hx, hu, hxx, hux, huu]
+            tuple: (h, hx, hu, hxx, hux, huu)
         """
         assert self._is_lambdified
         return self._dh_subs
 
     # ufunc
-    def get_df(self) -> list:
+    def get_df(self) -> tuple:
         """ Return derivatives of dynamics.
 
         Returns:
-            list [f, fx, fu, fxx, fux, fuu]
+            tuple (f, fx, fu, fxx, fux, fuu)
         """
         assert self._is_lambdified
         return self._df_ufunc
     
-    def get_dl(self) -> list:
+    def get_dl(self) -> tuple:
         """ Return derivatives of cost.
 
         Returns:
-            list [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+            tuple (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         """
         assert self._is_lambdified
         return self._dl_ufunc
 
-    def get_dg(self) -> list:
+    def get_dg(self) -> tuple:
         """ Return derivatives of inequality constraints.
 
         Returns:
-            list [g, gx, gu, gxx, gux, guu]
+            tuple (g, gx, gu, gxx, gux, guu)
         """
         assert self._is_lambdified
         return self._dg_ufunc
 
-    def get_dh(self) -> list:
+    def get_dh(self) -> tuple:
         """ Return derivatives of equality constraints.
 
         Returns:
-            list [h, hx, hu, hxx, hux, huu]
+            tuple (h, hx, hu, hxx, hux, huu)
         """
         assert self._is_lambdified
         return self._dh_ufunc
@@ -618,14 +618,14 @@ class OCP:
             h (sym.Matrix): Inequality constraints.
             T (float): Horizon length.
             N (int): Discretization grids.
-            t0 (float): Initial time.
+            t0 (float): Initial Time.
             x0 (numpy.array): Initial state. size must be n_x.
             us (numpy.array, optional): Guess of input trajectory. \
                 size must be (N * n_u).
             scalar_dict (dict) : {"name": (symbol, value)})
             vector_dict (dict) : {"name": (symbol, value)}) 
             matrix_dict (dict) : {"name": (symbol, value)}) 
-            is_continuous (bool): Is dynamics and costs are continuous-time.
+            is_continuous (bool): Is dynamics and costs are continuous-time. \
                 If true, they will be discretized.
 
         Returns:

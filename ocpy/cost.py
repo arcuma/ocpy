@@ -11,12 +11,12 @@ class SymCost:
                  l: sym.Symbol, lf: sym.Symbol):    
         """ Symbolic Cost class.
     
-            Args:
-                x (sym.Matrix): State vector.
-                u (sym.Matrix): Control input vector.
-                t (sym.Symbol): Time.
-                l (sym.Symbol): Stage cost.
-                lf (sym.Symbol): Terminal cost.
+        Args:
+            x (sym.Matrix): State vector.
+            u (sym.Matrix): Control input vector.
+            t (sym.Symbol): Time.
+            l (sym.Symbol): Stage cost.
+            lf (sym.Symbol): Terminal cost.
         """
         lx   = symutils.diff_scalar(l, x)
         lu   = symutils.diff_scalar(l, u)
@@ -73,11 +73,11 @@ class SymCost:
         """ Get derivatives of dynamics.
 
         Returns:
-            dl (list): [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx]
+            dl (tuple): (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         """
         return self.dl
 
-    def substitute_constatnts(self, dl_sym: list, 
+    def substitute_constatnts(self,
                               scalar_dict: dict=None, vector_dict: dict=None, 
                               matrix_dict: dict=None, dt: sym.Symbol=None,
                               dt_value: float=None):
@@ -85,22 +85,21 @@ class SymCost:
                 for numerical calculation.
 
         Args:
-            df_sym (list): Derivatives of l,\
-                [l, lx, lu, lxx, lux, luu, lf, lfx, lfxx].
-            dt (sym.symbol): Time discretization step
-            dt_value (float): Value of dt
             scalar_dict (dict): {"name": (symbol, value)}).
             vector_dict (dict): {"name": (symbol, value)}).
             matrix_dict (dict): {"name": (symbol, value)}).
+            dt (sym.Symbol): Discretization step.
+            dt_value (float): Value of dt.
 
         Returns:
-            dl_subs (list) : Constants-substituted symbolic \
+            dl_subs (tuple) : Constants-substituted symbolic \
                 cost function derivatives.
         """
-        self.df_subs = symutils.substitute_constants_list(
-            dl_sym, scalar_dict, vector_dict, matrix_dict, dt, dt_value
+        dl_subs = symutils.substitute_constants_list(
+            self.dl, scalar_dict, vector_dict, matrix_dict, dt, dt_value
         )
-        return self.df_subs
+        self.dl_subs = tuple(dl_subs)
+        return self.dl_subs
 
 class NumCost:
     """ Turn symbolic dynamics into fast universal function.
@@ -130,7 +129,7 @@ class NumCost:
                   lf_sym, lfx_sym, lfxx_sym]
         dl = []
         for i, func_sym in enumerate(dl_sym):
-            args = [x, u, t, dt] if i < 6 else [x, t]
+            args = [x, u, t] if i < 6 else [x, t]
             dim_reduction = True if i in [1, 2, 7] else False
             dl.append(symutils.lambdify(args, func_sym, dim_reduction))
         self.l    = dl[0]
@@ -148,8 +147,9 @@ class NumCost:
         """ Return dynamics ufunction.
 
             Returns:
-                dl (list): ufunction list of 
-                [l_ufunc, lx_ufunc, lu_ufunc, lxx_ufunc, lux_ufunc,  luu_ufunc, \
-                 lf_ufunc, lfx_ufunc, lfxx_ufunc]
+                dl (tuple): (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
+            
+            Note:
+                Arguments of l are [x, u, t], and of lf are [x, t].
         """
         return self.dl
