@@ -12,6 +12,12 @@ class OCP:
     """ Class that describes optimal control problem.
     """
     def __init__(self, n_x: int, n_u: int, ocp_name: str):
+        """ Constructor.
+
+        Args:
+            n_x (int): Dimension of state.
+            n_u (int): Dimension of input.
+        """
         self._n_x = n_x
         self._n_u = n_u
         self._ocp_name = ocp_name
@@ -64,7 +70,7 @@ class OCP:
     def define(
             self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
-            T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
+            t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
             is_continuous: bool=True, simplification: bool=False):
         """ Define optimal control problem. 
 
@@ -73,15 +79,15 @@ class OCP:
             l (sym.Symbol): Stage cost.
             lf (sym.Symbol): Terminal cost.
             g (sym.Matrix): Inequality constraints. \
-                If there is no inequality, pass None.
+                If there is no inequality constraints, pass None.
             h (sym.Matrix): Equality constraints. \
-                If there is no equality, pass None.
+                If there is no equality constraints, pass None.
+            t0 (float): Initial time.
+            x0 (numpy.array): Initial state. Size must be n_x.
             T (float): Horizon length
             N (int): Discretization grid number.
-            t0 (float): Initial time.
-            x0 (numpy.array): Initial state. size must be n_x.
             us_guess (numpy.array, optional): Guess of input trajectory. \
-                size must be (N * n_u).
+                Size must be (N * n_u).
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
             simplification (bool=False): If True, functions are simplified.\
@@ -145,11 +151,11 @@ class OCP:
             if self._has_eq_constraints:
                 symutils.simplify(dh_sym)
         # hold
+        self._t0 = t0
+        self._x0 = x0        
         self._T = float(T)
         self._N = N
         self._dt_value = T / N
-        self._t0 = t0
-        self._x0 = x0
         self._us_guess = us_guess
         self._is_continuous = is_continuous
         self._sym_dynamics = sym_dynamics
@@ -160,11 +166,11 @@ class OCP:
         self._df_sym = df_sym
         self._dl_sym = dl_sym
         self._is_ocp_defined = True
-        # generate num
+        # generate lambda function.
         self._lambdify()
 
     def define_unconstrained(self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
-               T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
+               t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
                is_continuous: bool=True, simplification: bool=False):
         """ Define optimal control problem. 
 
@@ -172,18 +178,18 @@ class OCP:
             f (sym.Matrix): State function.
             l (sym.Symbol): Stage cost.
             lf (sym.Symbol): Terminal cost.
+            t0 (float): Initial time.
+            x0 (numpy.array): Initial state. Size must be n_x.
             T (float): Horizon length
             N (int): Discretization grid number.
-            t0 (float): Initial time.
-            x0 (numpy.array): Initial state. size must be n_x.
             us_guess (numpy.array, optional): Guess of input trajectory. \
-                size must be (N * n_u).
+                Size must be (N * n_u).
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
             simplification (bool=False): If True, functions are simplified.\
                 Simplification may take time. Default is False.
         """
-        self.define(f=f, l=l, lf=lf, g=None, h=None, T=T, N=N, t0=t0, x0=x0,
+        self.define(f=f, l=l, lf=lf, g=None, h=None,t0=t0 , x0=x0, T=T, N=N,
                     us_guess=us_guess, is_continuous=is_continuous, 
                     simplification=simplification)
 
@@ -600,7 +606,7 @@ class OCP:
             x: sym.Matrix, u: sym.Matrix, t:sym.Symbol,  dt: sym.Symbol, 
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
-            T: float, N: int, t0: float, x0: np.ndarray, us_guess: np.ndarray,
+            t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
             scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
             is_continuous=True, simplification=False):
         """ Define optimal control problem. If symbolic constatnts are included, \
@@ -616,11 +622,11 @@ class OCP:
             lf (sym.Symbol): Terminal cost.
             g (sym.Matrix): Inequality constraints.
             h (sym.Matrix): Inequality constraints.
-            T (float): Horizon length.
-            N (int): Discretization grids.
             t0 (float): Initial Time.
             x0 (numpy.array): Initial state. size must be n_x.
-            us (numpy.array, optional): Guess of input trajectory. \
+            T (float): Horizon length.
+            N (int): Discretization grids.
+            us_guess (numpy.array, optional): Guess of input trajectory. \
                 size must be (N * n_u).
             scalar_dict (dict) : {"name": (symbol, value)})
             vector_dict (dict) : {"name": (symbol, value)}) 
@@ -637,7 +643,7 @@ class OCP:
         ocp._scalar_dict = scalar_dict
         ocp._vector_dict = vector_dict
         ocp._matrix_dict = matrix_dict
-        ocp.define(f, l, lf, g, h, T, N, t0, x0, us_guess,
+        ocp.define(f, l, lf, g, h, t0, x0, T, N, us_guess,
             is_continuous, simplification)
         return ocp
     
@@ -687,6 +693,6 @@ class OCP:
         t0 = 0.0
         x0 = np.array([0.0, 0.0, 0.0, 0.0])
         us_guess = np.zeros((N, n_u))
-        cartpole_ocp.define_unconstrained(f, l, lf, T, N, t0, x0, us_guess, 
+        cartpole_ocp.define_unconstrained(f, l, lf, t0, x0, T, N, us_guess, 
             is_continuous=True, simplification=simplification)
         return cartpole_ocp

@@ -15,105 +15,81 @@ from ocpy.solverbase import SolverBase
 class DDPSolver(SolverBase):
     """ Differential Dynamic Programming(DDP) solver.
     """
-    def __init__(self, ocp: OCP):
+    def __init__(self, ocp: OCP, init=True):
         """ Set optimal control problem.
         
         Args:
-            ocp(ocpy.OCP): optimal control problem. 
+            ocp (OCP): optimal control problem. 
+            init (bool=True): If true, call init_solver(). It may take time.
         """
         super().__init__(ocp)
-        # OCP
-        self._ocp = ocp
-        self._sim_name = ocp.get_ocp_name()
-        self._log_dir = join(dirname(dirname(abspath(__file__))), 'log',
-                             self._sim_name)
-        # dimensions of state and input.
-        self._n_x = ocp.get_n_x()
-        self._n_u = ocp.get_n_u()
-        # Horizon length, num of discretization, time step.
-        self._T = ocp.get_T()
-        self._N = ocp.get_N()
-        self._dt = self._T / self._N
-        # start time, x0 and initial guess of us
-        self._t0 = ocp.get_t0()
-        self._x0 = ocp.get_x0()
-        self._us_guess = ocp.get_us_guess()
-        # solver parameters
-        self._max_iter = 500
-        self._alphas = np.array([0.5**i for i in range(8)])
-        self._damp_init = 1.0
-        self._damp_min = 1e-5
-        self._damp_max = 1e5
-        self._stop_threshold = 1e-3
-        # functions derivatives.
-        self._df = ocp.get_df()
-        self._dl = ocp.get_dl()
-        self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
-        self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
-            self._lf, self._lfx, self._lfxx = self._dl
-        # pseudo AOT
-        DDPSolver.ddp(
-            self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu, 
-            self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, 
-            self._lf, self._lfx, self._lfxx,
-            self._t0, self._x0, self._us_guess, self._N, self._T, self._dt,
-            5 , self._alphas, self._damp_init, self._damp_min, 
-            self._damp_max, self._stop_threshold 
-        )
+        self._solver_name = 'DDP'
+        if init:
+            self.init_solver()
 
-    def ocp(self):
-        """ Return OCP.
-        """
-        return self._ocp
-
-    def get_log_directory(self) -> str:
-        """ Return directory path where logs are saved.
-        """
-        return self._log_dir
-    
-    def set_log_directory(self, log_dir: str):
-        """ Set directory path where logs are saved
-        """
-        self._log_dir = log_dir
-
-    def reset_initial_conditions(self, x0: np.ndarray, us_guess: np.ndarray,
-                                 t0: float):
-        """ Reset t0, x0, and initial guess of us_guess.
-        """
-        self._x0 = np.ndarray(x0, dtype=float)
-        self._us_guess = np.ndarray(us_guess, dtype=float)
-        self._t0 = float(t0)
-       
-    def set_solver_parameters(self, max_iter: int=None, alphas: np.ndarray=None,
-                              damp_init: float=None, damp_min: float=None, 
-                              damp_max: float=None, stop_threshold: float=None):
-        """ Set solver parameters.
+    def reset_guess(self, us_guess: np.ndarray=None):
+        """ Reset guess of input trajectory.
 
         Args:
-            max_iter (int): Number of maximum iterations.
-            alphas (np.ndarray): Line search steps.
-            damp_init (float): Initial value of damp,\
-                coefficient of regularization.
-            damp_min (float): Minimum value of damp.
-            damp_max (float): Maximum value of damp.
+            us_guess (np.ndarray): Guess of input trajectory.
         """
-        if max_iter is not None:
-            self._max_iter = max_iter
-        if alphas is not None:
-            self._alphas = np.array(alphas, dtype=float)
-        if damp_init is not None:
-            self._damp_init = damp_init
-        if damp_min is not None:
-            self._damp_min = damp_min
-        if damp_max is not None:
-            self._damp_max = damp_max
+        if us_guess is not None:
+            self._us_guess = np.asarray(us_guess, dtype=float)
+
+    def set_stop_threshold(self, stop_threshold: float=None):
+        """ Set stop creteria. If expectation of cost reduction is less than this, \
+            iteration stops.
+
+        Args:
+            stop_threshold (float): Stop creterion
+        """
         if stop_threshold is not None:
             self._stop_threshold = stop_threshold
 
-    def solve(self, result=True , log=False, plot=False):
+    def set_solver_parameters(
+            self, gamma_ini: float=None, rho_gamma: float=None,
+            gamma_min: float=None,  gamma_max: float=None, alphas: np.ndarray=None, 
+            max_iters: int=None, stop_threshold: float=None
+        ):
+        """ Set solver parameters.
+
+        Args:
+            max_iters (int): Number of maximum iterations.
+            gamma_ini (float): Initial value of damping coefficient.
+            rho_gamma (float): Increasing/decreasing factor of gamma. (>1)
+            gamma_min (float): Minimum value of damp.
+            gamma_max (float): Maximum value of damp.
+            alphas (np.ndarray): Line search steps.
+            stop_threshold (float): Stop criterion.
+        """
+        self.set_damping_coefficient(gamma_ini, rho_gamma, gamma_min, gamma_max)
+        self.set_alphas(alphas)
+        self.set_max_iters(max_iters)
+        self.set_stop_threshold(stop_threshold)
+
+    def init_solver(self):
+        """ Initialize solver. Call once before you first call solve().
+        """
+        print("Initializing solver...")
+        # caching
+        self._solve(
+            *self._df, *self._dl, 
+            t0=self._t0, x0=self._x0, N=self._N, T=self._T,
+            us_guess=self._us_guess, 
+            gamma_ini=self._gamma_ini, rho_gamma=self._rho_gamma,
+            gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
+            alphas=self._alphas,
+            max_iters=10, stop_threshold=self._stop_threshold
+        )
+        print("Initialization Done.")
+
+    def solve(self, gamma_fixed: float=None, enable_line_search: bool=True,
+              result: bool=True, log: bool=False, plot: bool=False):
         """ Solve OCP via DDP iteration.
 
         Args:
+            gamma_fixed (float): If set, damping coefficient is fixed.
+            enable_line_search (bool=True): If true, enable line searching.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
@@ -123,19 +99,27 @@ class DDPSolver(SolverBase):
             xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
             us (numpy.ndarray): Optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): Costs at each iteration.
+            time_elapsed (float): Computational time.
         """
-        max_iter = self._max_iter
-        alphas = self._alphas
-        damp_init = self._damp_init
-        damp_min = self._damp_min
-        damp_max = self._damp_max
+        if gamma_fixed is None:
+            gamma_ini = self._gamma_ini
+            rho_gamma = self._rho_gamma
+            gamma_min = self._gamma_min
+            gamma_max = self._gamma_max
+        else:
+            gamma_ini =  gamma_min = gamma_max = gamma_fixed
+            rho_gamma = 1.0
+        if enable_line_search:
+            alphas = self._alphas
+        else:
+            alphas = np.array([1.0])
+        max_iters = self._max_iters
         stop_threshold = self._stop_threshold
         t0 = self._t0
         x0 = self._x0
-        us = self._us_guess
         N = self._N
         T = self._T
-        dt = self._dt
+        us_guess = self._us_guess
         # derivatives functions.
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
@@ -144,10 +128,10 @@ class DDPSolver(SolverBase):
         # computational time
         time_start = time.perf_counter()
         # solve
-        ts, xs, us, Js, is_success = DDPSolver.ddp(
+        ts, xs, us, Js, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, us, N, T, dt, max_iter, alphas, damp_init, damp_min, damp_max,
-            stop_threshold 
+            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            alphas, max_iters, stop_threshold
         )
         # computational time
         time_end = time.perf_counter()
@@ -156,25 +140,27 @@ class DDPSolver(SolverBase):
         iters = len(Js) - 1
         # results
         if result:
-            self.print_result(is_success, iters, Js[-1], time_elapsed)
+            self.print_result(self._solver_name, is_success, iters, Js[-1],
+                              time_elapsed)
         # log
         if log:
             self.log_data(self._log_dir, ts, xs, us, Js)
         # plot
         if plot:
             self.plot_data(self._log_dir, ts, xs, us, Js)
-        return ts, xs, us, Js
+        return ts, xs, us, Js, time_elapsed
 
     @staticmethod
     @numba.njit
-    def ddp(f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, us, N, T, dt, max_iter, alphas, damp_init, damp_min, damp_max,
-            stop_threshold):
+    def _solve(
+            f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            alphas, max_iters, stop_threshold
+        ):
         """ DDP algorithm.
         """
-    # innner functions
-        def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray,
-                    t0: float, dt: float):
+    ##### INNER FUNCTIONS #####
+        def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
             """ Rollout state trajectory from initial state and input trajectory,\
                 with cost is calculated.
 
@@ -182,22 +168,19 @@ class DDPSolver(SolverBase):
                 f (function): State equation.
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
+                t0 (float): Initial time.                
                 x0 (np.ndarray): Initial state.
                 us (np.ndarray): Input control trajectory.
-                t0 (float): Initial time.
                 dt (float): Discrete time step.
             """
             N = us.shape[0]
-            # time, state trajectory and cost
             xs = np.zeros((N + 1, x0.shape[0]))
             xs[0] = x0
             J = 0.0
             for i in range(N):
-                t = t0 + i*dt
-                xs[i + 1] = xs[i] + f(xs[i], us[i], t) * dt
-                J += l(xs[i], us[i], t) * dt
-            t = t0 + i*N
-            J += lf(xs[N], t)
+                xs[i + 1] = xs[i] + f(xs[i], us[i], t0 + i*dt) * dt
+                J += l(xs[i], us[i], t0 + i*dt) * dt
+            J += lf(xs[N], t0 + i*N)
             return xs, J
 
         def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
@@ -223,7 +206,7 @@ class DDPSolver(SolverBase):
         def backward_pass(fx, fu, fxx, fux, fuu, 
                           lx, lu, lxx, lux, luu, lfx, lfxx,
                           xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                          damp: float=1e-6):
+                          gamma: float=1e-6):
             """ Backward pass of DDP.
 
             Args:
@@ -245,7 +228,7 @@ class DDPSolver(SolverBase):
                     Size must be N*n_u.
                 t0 (float): Initial time.
                 dt (float): Discrete time step.
-                damp (float): Damping coefficient.
+                gamma (float): Damping coefficient.
 
             Returns:
                 ks (numpy.ndarray): Series of k. Its size is N * n_u
@@ -266,7 +249,7 @@ class DDPSolver(SolverBase):
             # expected cost cahnge of all stage
             delta_V = 0
             # daming matrix
-            Reg = damp * np.eye(n_u)
+            Reg = gamma * np.eye(n_u)
             for i in range(N - 1, -1, -1):
                 # t, x and u at satge i
                 t = t0 + i*dt
@@ -301,8 +284,8 @@ class DDPSolver(SolverBase):
                 delta_V += delta_V_i
             return ks, Ks, delta_V
         
-        def forward_pass(f, l, lf, xs: np.ndarray, us: np.ndarray,
-                         t0: float, dt: float,
+        def forward_pass(f, l, lf, 
+                         xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
                          ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
             """ Forward pass of DDP.
 
@@ -335,57 +318,59 @@ class DDPSolver(SolverBase):
             for i in range(N):
                 t = t0 + i*dt
                 us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
-                xs_new[i + 1] = xs_new[i] +  f(xs_new[i], us_new[i], t) * dt
+                xs_new[i + 1] = xs_new[i] + f(xs_new[i], us_new[i], t) * dt
                 J_new += l(xs_new[i], us_new[i], t) * dt
             # terminal cost
-            J_new += lf(xs_new[N], t + T)
+            J_new += lf(xs_new[N], t0 + T)
             return xs_new, us_new, J_new
-    # innner functions end
-        # flag
-        is_success = False        
+    ##### END INNER FUNCTIONS #####
+
+        dt = T / N
+        us = us_guess
         xs, J = rollout(f, l, lf, x0, us, t0, dt)
-        Js = np.zeros(max_iter + 1, dtype=float)
+        Js = np.zeros(max_iters + 1, dtype=float)
         Js[0] = J
-        # dumping coefficient of C-Newton.
-        damp = damp_init
+        gamma = gamma_ini
+        is_success = False
         # main iteration
-        for iters in range(max_iter):
+        for iters in range(1, max_iters + 1):
             # backward pass
-            ks, Ks, Delta_V = backward_pass(
+            ks, Ks, delta_V = backward_pass(
                 fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
-                xs, us, t0, dt, damp
+                xs, us, t0, dt, gamma
             )
-            if np.abs(Delta_V) < stop_threshold:
+            if np.abs(delta_V) < stop_threshold:
                 is_success = True
+                iters -= 1
                 break
-            elif Delta_V > 0:
-                # it's no use line searching
-                damp *= 10.0
-                Js[iters + 1] = J
+            elif delta_V > 0:
+                gamma *= rho_gamma
+                Js[iters] = J
                 continue
-            # forward pass in line search 
+            # line search 
             for alpha in alphas:
+                # forward pass
                 xs_new, us_new, J_new = forward_pass(
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
                 if J_new < J:
-                    # line search success
+                    # line search succeeded
                     xs = xs_new
                     us = us_new
                     J = J_new
-                    damp *= 0.5
+                    gamma /= rho_gamma
                     break
             else:
                 # line search failed
-                damp *= 2.0
-                damp = min(max(damp, damp_min), damp_max)
-            Js[iters + 1] = J
-        ts = np.array([i*dt for i in range(N + 1)])
+                gamma *= rho_gamma
+            gamma = min(max(gamma, gamma_min), gamma_max)
+            Js[iters] = J
+        ts = np.array([t0 + i*dt for i in range(N + 1)])
         Js = Js[0:iters + 1]
         return ts, xs, us, Js, is_success
     
     @staticmethod
-    def print_result(is_success: bool, iters: int, cost: float,
+    def print_result(solver_name: str, is_success: bool, iters: int, cost: float,
                      computational_time: float):
         """ Print summary of result.
         
@@ -394,7 +379,8 @@ class DDPSolver(SolverBase):
             iters (int): Number of iterations.
             computational_time (float): total computational time.
         """
-        print('--- RESULT ---')
+        print('------------------- RESULT -------------------')
+        print(f'solver: {solver_name}')
         if is_success:
             status = 'success'
         else:
@@ -404,7 +390,7 @@ class DDPSolver(SolverBase):
         print(f'cost value: {cost}')
         print(f'computational time: {computational_time} [s]')
         print(f'per update : {computational_time / iters} [s]')
-        print('--------------')
+        print('----------------------------------------------')
     
     @staticmethod
     def log_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
@@ -437,111 +423,37 @@ class DDPSolver(SolverBase):
         plotter.plot(save=True)
 
 
-class iLQRSolver(SolverBase):
-    """ Iterative Linear Quadratic Regulator (iLQR) solver.
-    """
+class iLQRSolver(DDPSolver):
+    def __init__(self, ocp: OCP, init=True):
+        super().__init__(ocp=ocp, init=False)
+        self._solver_name = 'iLQR'
+        self._df = self._df[0:3]        
+        if init:
+            self.init_solver()
 
-    def __init__(self, ocp: OCP):
-        """ Set optimal control problem.
-        
-        Args:
-            ocp(ocpy.OCP): optimal control problem. 
+    def init_solver(self):
+        """ Initialize solver. Call once before you first call solve().
         """
-        super().__init__(ocp)
-        # OCP
-        self._ocp = ocp
-        self._sim_name = ocp.get_ocp_name()
-        self._log_dir = join(dirname(dirname(abspath(__file__))), 'log',
-                             self._sim_name)
-        # dimensions of state and input.
-        self._n_x = ocp.get_n_x()
-        self._n_u = ocp.get_n_u()
-        # Horizon length, num of discretization, time step.
-        self._T = ocp.get_T()
-        self._N = ocp.get_N()
-        self._dt = self._T / self._N
-        # start time, x0 and initial guess of us
-        self._t0 = ocp.get_t0()
-        self._x0 = ocp.get_x0()
-        self._us_guess = ocp.get_us_guess()
-        # solver parameters
-        self._max_iter = 500
-        self._alphas = np.array([0.5**i for i in range(8)])
-        self._damp_init = 1.0
-        self._damp_min = 1e-5
-        self._damp_max = 1e5
-        self._stop_threshold = 1e-3
-
-        # functions derivatives.
-        self._df = ocp.get_df()
-        self._dl = ocp.get_dl()
-        self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
-        self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
-            self._lf, self._lfx, self._lfxx = self._dl
-        
-        # pseudo AOT
-        iLQRSolver.ilqr(
-            self._f, self._fx, self._fu, 
-            self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, 
-            self._lf, self._lfx, self._lfxx,
-            self._t0, self._x0, self._us_guess, self._N, self._T, self._dt,
-            5 , self._alphas, self._damp_init, self._damp_min, 
-            self._damp_max, self._stop_threshold
+        print("Initializing solver...")
+        # caching
+        self._solve(
+            *self._df, *self._dl, 
+            t0=self._t0, x0=self._x0, N=self._N, T=self._T,
+            us_guess=self._us_guess, 
+            gamma_ini=self._gamma_ini, rho_gamma=self._rho_gamma,
+            gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
+            alphas=self._alphas,
+            max_iters=10, stop_threshold=self._stop_threshold
         )
+        print("Initialization Done.")
 
-    def ocp(self):
-        """ Return OCP.
-        """
-        return self._ocp
-
-    def get_log_directory(self) -> str:
-        """ Return directory path where logs are saved.
-        """
-        return self._log_dir
-    
-    def set_log_directory(self, log_dir: str):
-        """ Set directory path where logs are saved
-        """
-        self._log_dir = log_dir
-
-    def reset_initial_conditions(self, x0: np.ndarray, us_guess: np.ndarray,
-                                 t0: float):
-        """ Reset t0, x0, and initial guess of us_guess.
-        """
-        self._x0 = np.ndarray(x0, dtype=float)
-        self._us_guess = np.ndarray(us_guess, dtype=float)
-        self._t0 = float(t0)
-       
-    def set_solver_parameters(self, max_iter: int=None, alphas: np.ndarray=None,
-                              damp_init: float=None, damp_min: float=None, 
-                              damp_max: float=None, stop_threshold: float=None):
-        """ Set solver parameters.
-
-        Args:
-            max_iter (int): Number of maximum iterations.
-            alphas (np.ndarray): Line search steps.
-            damp_init (float): Initial value of damp,\
-                coefficient of regularization.
-            damp_min (float): Minimum value of damp.
-            damp_max (float): Maximum value of damp.
-        """
-        if max_iter is not None:
-            self._max_iter = max_iter
-        if alphas is not None:
-            self._alphas = np.array(alphas, dtype=float)
-        if damp_init is not None:
-            self._damp_init = damp_init
-        if damp_min is not None:
-            self._damp_min = damp_min
-        if damp_max is not None:
-            self._damp_max = damp_max
-        if stop_threshold is not None:
-            self._stop_threshold = stop_threshold
-
-    def solve(self, result=True , log=False, plot=False):
+    def solve(self, gamma_fixed: float=None, enable_line_search: bool=True,
+              result: bool=True, log: bool=False, plot: bool=False):
         """ Solve OCP via iLQR iteration.
 
         Args:
+            gamma_fixed (float): If set, damping coefficient is fixed.
+            enable_line_search (bool=True): If true, enable line searching.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
@@ -551,31 +463,39 @@ class iLQRSolver(SolverBase):
             xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
             us (numpy.ndarray): Optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): Costs at each iteration.
+            time_elapsed (float): Computational time.
         """
-        max_iter = self._max_iter
-        alphas = self._alphas
-        damp_init = self._damp_init
-        damp_min = self._damp_min
-        damp_max = self._damp_max
+        if gamma_fixed is None:
+            gamma_ini = self._gamma_ini
+            rho_gamma = self._rho_gamma
+            gamma_min = self._gamma_min
+            gamma_max = self._gamma_max
+        else:
+            gamma_ini =  gamma_min = gamma_max = gamma_fixed
+            rho_gamma = 1.0
+        if enable_line_search:
+            alphas = self._alphas
+        else:
+            alphas = np.array([1.0])
+        max_iters = self._max_iters
         stop_threshold = self._stop_threshold
         t0 = self._t0
         x0 = self._x0
-        us = self._us_guess
         N = self._N
         T = self._T
-        dt = self._dt
+        us_guess = self._us_guess
         # derivatives functions.
-        f, fx, fu, _, _, _ = self._df
+        f, fx, fu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
         # success flag of solver.
         is_success = False
         # computational time
         time_start = time.perf_counter()
         # solve
-        ts, xs, us, Js, is_success = iLQRSolver.ilqr(
+        ts, xs, us, Js, is_success = self._solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, us, N, T, dt, max_iter, alphas, damp_init, damp_min, damp_max,
-            stop_threshold 
+            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            alphas, max_iters, stop_threshold
         )
         # computational time
         time_end = time.perf_counter()
@@ -584,25 +504,27 @@ class iLQRSolver(SolverBase):
         iters = len(Js) - 1
         # results
         if result:
-            self.print_result(is_success, iters, Js[-1], time_elapsed)
+            self.print_result(self._solver_name, is_success, iters, Js[-1], 
+                              time_elapsed)
         # log
         if log:
             self.log_data(self._log_dir, ts, xs, us, Js)
         # plot
         if plot:
             self.plot_data(self._log_dir, ts, xs, us, Js)
-        return ts, xs, us, Js
+        return ts, xs, us, Js, time_elapsed
 
     @staticmethod
     @numba.njit
-    def ilqr(f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-             t0, x0, us, N, T, dt, max_iter, alphas, damp_init, damp_min, damp_max,
-             stop_threshold):
+    def _solve(
+            f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            alphas, max_iters, stop_threshold
+        ):
         """ iLQR algorithm.
         """
-    # innner functions
-        def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray,
-                    t0: float, dt: float):
+    ##### INNER FUNCTIONS #####
+        def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
             """ Rollout state trajectory from initial state and input trajectory,\
                 with cost is calculated.
 
@@ -610,29 +532,26 @@ class iLQRSolver(SolverBase):
                 f (function): State equation.
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
+                t0 (float): Initial time.                
                 x0 (np.ndarray): Initial state.
                 us (np.ndarray): Input control trajectory.
-                t0 (float): Initial time.
                 dt (float): Discrete time step.
             """
             N = us.shape[0]
-            # time, state trajectory and cost
             xs = np.zeros((N + 1, x0.shape[0]))
             xs[0] = x0
             J = 0.0
             for i in range(N):
-                t = t0 + i*dt
-                xs[i + 1] = xs[i] + f(xs[i], us[i], t) * dt
-                J += l(xs[i], us[i], t) * dt
-            t = t0 + i*N
-            J += lf(xs[N], t)
+                xs[i + 1] = xs[i] + f(xs[i], us[i], t0 + i*dt) * dt
+                J += l(xs[i], us[i], t0 + i*dt) * dt
+            J += lf(xs[N], t0 + i*N)
             return xs, J
 
-        def backward_pass(fx, fu, 
+        def backward_pass(fx, fu,
                           lx, lu, lxx, lux, luu, lfx, lfxx,
                           xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                          damp: float=1e-6):
-            """ Backward pass of iLQR.
+                          gamma: float=1e-6):
+            """ Backward pass of DDP.
 
             Args:
                 fx (function): Derivative of f w.r.t. state x.
@@ -650,12 +569,12 @@ class iLQRSolver(SolverBase):
                     Size must be N*n_u.
                 t0 (float): Initial time.
                 dt (float): Discrete time step.
-                damp (float): Damping coefficient.
+                gamma (float): Damping coefficient.
 
             Returns:
                 ks (numpy.ndarray): Series of k. Its size is N * n_u
                 Ks (numpy.ndarray): Series of K. Its size is N * (n_u * n_x)
-                Delta_V (float): Expecting change of value function at stage 0.
+                delta_V (float): Expecting change of value function at stage 0.
             """
             N = us.shape[0]
             T = N * dt
@@ -671,7 +590,7 @@ class iLQRSolver(SolverBase):
             # expected cost cahnge of all stage
             delta_V = 0
             # daming matrix
-            Reg = damp * np.eye(n_u)
+            Reg = gamma * np.eye(n_u)
             for i in range(N - 1, -1, -1):
                 # t, x and u at satge i
                 t = t0 + i*dt
@@ -703,24 +622,24 @@ class iLQRSolver(SolverBase):
                 delta_V += delta_V_i
             return ks, Ks, delta_V
         
-        def forward_pass(f, l, lf, xs: np.ndarray, us: np.ndarray,
-                        t0: float, dt: float,
-                        ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
-            """ Forward pass of iLQR.
+        def forward_pass(f, l, lf, 
+                         xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
+                         ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
+            """ Forward pass of DDP.
 
             Args:
                 f (function): State function.
                 l (function): Stage cost function.
                 lf (function): Terminal cost function.
                 xs (numpy.ndarray): Nominal state trajectory.\
-                    size must be (N+1)*n_u
+                    Size must be (N+1)*n_u
                 us (numpy.ndarray): Nominal control trajectory.\
-                    size must be N*n_u
+                    Size must be N*n_u
                 t0 (float): Initial time.
                 dt (float): Discrete time step.
                 ks (numpy.ndarray): Series of k. Size must be N * n_u.
                 Ks (numpy.ndarray): Series of K. Size must be N * (n_u * n_x).
-                alpha (float): step Size of line search. 0<= alpha <= 1.0.
+                alpha (float): step Size of line search. 0 <= alpha <= 1.0.
 
             Returns:
                 xs_new (numpy.ndarray): New state trajectory.
@@ -740,100 +659,50 @@ class iLQRSolver(SolverBase):
                 xs_new[i + 1] = xs_new[i] + f(xs_new[i], us_new[i], t) * dt
                 J_new += l(xs_new[i], us_new[i], t) * dt
             # terminal cost
-            J_new += lf(xs_new[N], t + T)
+            J_new += lf(xs_new[N], t0 + T)
             return xs_new, us_new, J_new
-    # innner functions end
-        # flag
-        is_success = False        
+    ##### END INNER FUNCTIONS #####
+
+        dt = T / N
+        us = us_guess
         xs, J = rollout(f, l, lf, x0, us, t0, dt)
-        Js = np.zeros(max_iter + 1, dtype=float)
+        Js = np.zeros(max_iters + 1, dtype=float)
         Js[0] = J
-        # dumping coefficient of C-Newton.
-        damp = damp_init
+        gamma = gamma_ini
+        is_success = False
         # main iteration
-        for iters in range(max_iter):
+        for iters in range(1, max_iters + 1):
             # backward pass
-            ks, Ks, Delta_V = backward_pass(
+            ks, Ks, delta_V = backward_pass(
                 fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
-                xs, us, t0, dt, damp
+                xs, us, t0, dt, gamma
             )
-            if np.abs(Delta_V) < stop_threshold:
+            if np.abs(delta_V) < stop_threshold:
                 is_success = True
+                iters -= 1
                 break
-            elif Delta_V > 0:
-                # it's no use line searching
-                damp *= 10.0
-                Js[iters + 1] = J
+            elif delta_V > 0:
+                gamma *= rho_gamma
+                Js[iters] = J
                 continue
-            # forward pass in line search 
+            # line search 
             for alpha in alphas:
+                # forward pass
                 xs_new, us_new, J_new = forward_pass(
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
                 if J_new < J:
-                    # line search success
+                    # line search succeeded
                     xs = xs_new
                     us = us_new
                     J = J_new
-                    damp *= 0.5
+                    gamma /= rho_gamma
                     break
             else:
                 # line search failed
-                damp *= 2.0
-                damp = min(max(damp, damp_min), damp_max)
-            Js[iters + 1] = J
-        ts = np.array([i*dt for i in range(N + 1)])
+                gamma *= rho_gamma
+            gamma = min(max(gamma, gamma_min), gamma_max)
+            Js[iters] = J
+        ts = np.array([t0 + i*dt for i in range(N + 1)])
         Js = Js[0:iters + 1]
         return ts, xs, us, Js, is_success
-    
-    @staticmethod
-    def print_result(is_success: bool, iters: int, cost: float,
-                     computational_time: float):
-        """ Print summary of result.
-        
-        Args:
-            is_success (bool): Flag of success or failure.
-            iters (int): Number of iterations.
-            computational_time (float): total computational time.
-        """
-        print('--- RESULT ---')
-        if is_success:
-            status = 'success'
-        else:
-            status = 'failure'
-        print(f'status: {status}')
-        print(f'iteration: {iters}')
-        print(f'cost value: {cost}')
-        print(f'computational time: {computational_time} [s]')
-        print(f'per update : {computational_time / iters} [s]')
-        print('--------------')
-    
-    @staticmethod
-    def log_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
-                 Js: np.ndarray):
-        """ Log data.
-        
-        Args:
-            log_dir (str): Directory where data are saved.
-            ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
-            Js (numpy.ndarray): costs at each iteration.
-        """
-        logger = Logger(log_dir)
-        logger.save(ts, xs, us, Js)
-
-    @staticmethod
-    def plot_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
-                  Js: np.ndarray):
-        """ Plot data and save it.
-        
-        Args:
-            log_dir (str): Directory where data are saved.
-            ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
-            Js (numpy.ndarray): costs at each iteration.
-        """
-        plotter = Plotter(log_dir, ts, xs, us, Js)
-        plotter.plot(save=True)
