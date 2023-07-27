@@ -17,6 +17,7 @@ class OCP:
         Args:
             n_x (int): Dimension of state.
             n_u (int): Dimension of input.
+            ocp_name (str):
         """
         self._n_x = n_x
         self._n_u = n_u
@@ -39,12 +40,15 @@ class OCP:
         self._t0 = None
         self._x0 = None
         self._us_guess = None
+        self._xs_guess = None
         self._is_continuous = None
-        self._sym_dynamics = None
-        self._sym_cost = None
         self._f_original = None
         self._l_original = None
-        self._lf_original = None
+        self._lf_original = None        
+        self._sym_dynamics = None
+        self._sym_cost = None
+        self._sym_ineq_constraints = None
+        self._sym_eq_constraints = None
         self._df_sym = None
         self._dl_sym = None
         self._dg_sym = None
@@ -67,11 +71,13 @@ class OCP:
         self._dh_num = None
         self._is_lambdified = False
 
-    def define(
-            self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
+    def define(self,
+            f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
-            t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
-            is_continuous: bool=True, simplification: bool=False):
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
+            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
+            is_continuous: bool=True, simplification: bool=False
+        ):
         """ Define optimal control problem. 
 
         Args:
@@ -84,10 +90,12 @@ class OCP:
                 If there is no equality constraints, pass None.
             t0 (float): Initial time.
             x0 (numpy.array): Initial state. Size must be n_x.
-            T (float): Horizon length
+            T (float): Horizon length.
             N (int): Discretization grid number.
-            us_guess (numpy.array, optional): Guess of input trajectory. \
-                Size must be (N * n_u).
+            xs_guess (numpy.array): Guess of state trajectory. \
+                Size must be (N+1)*n_x. Only used in multiple-shooting.
+            us_guess (numpy.array): Guess of input trajectory. \
+                Size must be N*n_u.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
             simplification (bool=False): If True, functions are simplified.\
@@ -95,12 +103,19 @@ class OCP:
         """
         x, u, t, dt = self._x, self._u, self._t, self._dt
         n_x, n_u = self._n_x, self._n_u
-        # turn x0 and us_guess into ndarray if not.
+        t0 = float(t0) if t0 is not None else 0.0
         if x0 is not None:
             x0 = np.array(x0, dtype=float)
             assert x0.shape[0] == n_x
         else:
             x0 = np.zeros(n_x)
+        T = float(T) if T is not None else 5.0
+        N = int(N) if N is not None else 200
+        if xs_guess is not None:
+            xs_guess = np.array(xs_guess, dtype=float)
+            assert xs_guess.shape == (N + 1, n_x)
+        else:
+            xs_guess = np.tile(x0, (N + 1, 1))
         if us_guess is not None:
             us_guess = np.array(us_guess, dtype=float)
             assert us_guess.shape == (N, n_u)
@@ -131,7 +146,7 @@ class OCP:
             # hold
             self._sym_ineq_constraints = sym_ineq_constraints
             self._dg_sym = dg_sym
-            self._n_g = len(dg_sym)
+            self._n_g = len(g)
             self._has_ineq_constraints = has_ineq_constraints
         # equality constraints
         if h is not None:
@@ -141,6 +156,7 @@ class OCP:
             # hold
             self._sym_ineq_constraints = sym_eq_constraints
             self._dh_sym = dh_sym
+            self._n_h = len(h)
             self._has_eq_constraints = has_eq_constraints
         # simplify
         if simplification:
@@ -156,6 +172,7 @@ class OCP:
         self._T = float(T)
         self._N = N
         self._dt_value = T / N
+        self._xs_guess = xs_guess
         self._us_guess = us_guess
         self._is_continuous = is_continuous
         self._sym_dynamics = sym_dynamics
@@ -169,9 +186,12 @@ class OCP:
         # generate lambda function.
         self._lambdify()
 
-    def define_unconstrained(self, f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
-               t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
-               is_continuous: bool=True, simplification: bool=False):
+    def define_unconstrained(self,
+            f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None, 
+            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
+            is_continuous: bool=True, simplification: bool=False
+        ):
         """ Define optimal control problem. 
 
         Args:
@@ -180,8 +200,10 @@ class OCP:
             lf (sym.Symbol): Terminal cost.
             t0 (float): Initial time.
             x0 (numpy.array): Initial state. Size must be n_x.
-            T (float): Horizon length
+            T (float): Horizon length.
             N (int): Discretization grid number.
+            xs_guess (numpy.array): Guess of state trajectory. \
+                Size must be (N+1)*n_x. Only used in multiple-shooting.
             us_guess (numpy.array, optional): Guess of input trajectory. \
                 Size must be (N * n_u).
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
@@ -190,8 +212,8 @@ class OCP:
                 Simplification may take time. Default is False.
         """
         self.define(f=f, l=l, lf=lf, g=None, h=None,t0=t0 , x0=x0, T=T, N=N,
-                    us_guess=us_guess, is_continuous=is_continuous, 
-                    simplification=simplification)
+                    xs_guess=xs_guess, us_guess=us_guess, 
+                    is_continuous=is_continuous, simplification=simplification)
 
     def _lambdify(self) -> tuple[list, list]:
         """ Generate sympy symbolic expression into numpy function.\
@@ -252,53 +274,123 @@ class OCP:
         self._dl_num = dl_num
         self._is_lambdified = True
 
-    def reset_parameters(self, t0: float, T: float, N: int,
-                         x0: np.ndarray, us_guess: np.ndarray):
+    def reset_initial_condition(self, t0: float=None, x0: np.ndarray=None):
+        """ Reset t0 and x0.
+
+        Args:
+            t0 (float): Initial time of horizon.
+            x0 (float): Initial state of horizon.
+        """
+        if t0 is not None:
+            self._t0 = float(t0)
+        if x0 is not None:
+            x0 = np.array(x0, dtype=float).reshape(-1)
+            assert x0.shape[0] == self._n_x
+            self._x0 = np.array(x0, dtype=float)
+    
+    def reset_horizon(self, T: float=None, N: float=None):
+        """ Reset T and N.
+
+        Args:
+            T (float): Horizon length.
+            N (int): Discretization grid number.
+        """
+        if T is not None:
+            assert T > 0
+            self._T = float(T)
+        if N is not None:
+            assert isinstance(N, int) and N > 0
+            self._N = N
+        self._dt_val = self._N / self._T
+
+    def reset_guess(self, xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
+        """ Reset guess of state and input trajectory.
+
+        Args:
+            xs_guess (np.ndarray): Guess of state trajectory.
+            us_guess (np.ndarray): Guess of input trajectory.
+        """
+        if xs_guess is not None:
+            assert xs_guess.shape == (self._N + 1, self._n_x)
+            self._xs_guess = np.asarray(xs_guess, dtype=float)  
+        if us_guess is not None:
+            assert us_guess.shape == (self._N, self._n_u)
+            self._us_guess = np.asarray(us_guess, dtype=float)  
+
+    def reset_parameters(self, t0: float=None, x0: np.ndarray=None,
+                         T: float=None, N: int=None,
+                         xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
         """ Reset parameters.
 
         Args:
-            t0 (float): Initial time.
+            t0 (float): Initial time of horizon.
+            x0 (float): Initial state of horizon.
             T (float): Horizon length.
-            N (int): Discretization grid.
-            x0 (np.ndarray): Initial state
-            us_guess (np.ndarray): Initial input guess.
+            N (int): Discretization grid number.
+            xs_guess (np.ndarray): Guess of state trajectory.
+            us_guess (np.ndarray): Guess of input trajectory.
         """
         assert self._is_ocp_defined
-        self._t0 = float(t0)
-        self._T = float(T)
-        self._N = N
-        self._dt_value = T / N
-        self.reset_x0(x0)
-        self.reset_us_guess(us_guess)
-        # for dt_value being changed.
-        self._lambdify()
-
-    def reset_x0(self, x0: np.ndarray | list) -> np.ndarray:
-        """ Reset x0. If list is given, transformed into ndarray.
-
-        Args:
-            x0 (numpy.ndarray): Initial state. size must be n_x.
+        self.reset_initial_condition(t0, x0)
+        self.reset_horizon(T, N)
+        self.reset_guess(xs_guess, us_guess)
+    
+    def get_initial_condition(self):
+        """ Return t0 and x0.
         """
-        if x0 is None:
-            return
-        x0 = np.array(x0, dtype=float)
-        assert x0.shape[0] == self._n_x
-        self._x0 = x0
-        return x0
-
-    def reset_us_guess(self, us_guess: np.ndarray | list) -> np.ndarray:
-        """ Reset us_guess. If list is given, transformed into ndarray.
-
-        Args:
-            us (numpy.ndarray): Initial guess of input trajectory. \
-                Size must be (N * n_u).
+        return self._t0, self._x0
+    
+    def get_horizon(self):
+        """ Return T and N.
         """
-        if us_guess is None:
-            return
-        us_guess = np.array(us_guess, dtype=float)
-        assert us_guess.shape == (self._N, self._n_u)
-        self._us_guess = us_guess
-        return us_guess
+        return self._T, self._N
+
+    def get_guess(self):
+        """ Return initial guess of xs and us.
+        """
+        return self._xs_guess, self._us_guess
+
+    def get_t0(self) -> float:
+        """ Return t0.
+        """
+        assert self._is_ocp_defined
+        return self._t0
+
+    def get_x0(self) -> np.ndarray:
+        """ Return initial state x0.
+        """
+        assert self._is_ocp_defined
+        return self._x0
+
+    def get_T(self) -> float:
+        """ Return horizon length.
+        """
+        assert self._is_ocp_defined
+        return self._T
+
+    def get_N(self) -> int:
+        """ Return number of discretization grids.
+        """
+        assert self._is_ocp_defined
+        return self._N
+
+    def get_dt_value(self) -> float:
+        """ Return value of dt (=T/N).
+        """
+        assert self._is_ocp_defined
+        return self._dt_value
+
+    def get_xs_guess(self) -> np.ndarray:
+        """ Return initial guess of xs.
+        """
+        assert self._is_ocp_defined
+        return self._xs_guess
+
+    def get_us_guess(self) -> np.ndarray:
+        """ Return initial guess of us.
+        """
+        assert self._is_ocp_defined
+        return self._us_guess
 
     # symbolic
     def get_df_symbolic(self) -> tuple:
@@ -321,6 +413,7 @@ class OCP:
     
     def get_dg_symbolic(self) -> tuple:
         """ Return symbolic derivatives of inequality constraints.
+            If no inequality constraints, return None.
 
         Returns:
             tuple: (g, gx, gu, gxx, gux, guu)
@@ -330,6 +423,7 @@ class OCP:
 
     def get_dh_symbolic(self) -> tuple:
         """ Return symbolic derivatives of equality constraints.
+            If no equality constraints, return None.
 
         Returns:
             tuple: (h, hx, hu, hxx, hux, huu)
@@ -359,6 +453,7 @@ class OCP:
     def get_dg_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives \
             of inequality constraints.
+            If no inequality constraints, return None.
 
         Returns:
             tuple: (g, gx, gu, gxx, gux, guu)
@@ -369,6 +464,7 @@ class OCP:
     def get_dh_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives \
             equality constraints.
+            If no equality constraints, return None.
 
         Returns:
             tuple: (h, hx, hu, hxx, hux, huu)
@@ -397,6 +493,7 @@ class OCP:
 
     def get_dg(self) -> tuple:
         """ Return derivatives of inequality constraints.
+            If no inequality constraints, return None.
 
         Returns:
             tuple (g, gx, gu, gxx, gux, guu)
@@ -406,6 +503,7 @@ class OCP:
 
     def get_dh(self) -> tuple:
         """ Return derivatives of equality constraints.
+            If no equality constraints, return None.
 
         Returns:
             tuple (h, hx, hu, hxx, hux, huu)
@@ -447,12 +545,12 @@ class OCP:
         return self._n_u
     
     def get_n_g(self) -> int:
-        """ Return dimension of inequality constraints.
+        """ Return dimension of inequality constraints g.
         """
         return self._n_g
     
     def get_n_h(self) -> int:
-        """ Return dimension of equality constraints.
+        """ Return dimension of equality constraints h.
         """
         return self._n_h
 
@@ -460,42 +558,6 @@ class OCP:
         """ Return n_x*1-size symbolic zero vector.
         """
         return sym.zeros(self._n_x, 1)
-    
-    def get_T(self) -> float:
-        """ Return horizon length.
-        """
-        assert self._is_ocp_defined
-        return self._T
-
-    def get_N(self) -> int:
-        """ Return number of discretization grids.
-        """
-        assert self._is_ocp_defined
-        return self._N
-
-    def get_dt_value(self) -> float:
-        """ Return value of dt (=T/N).
-        """
-        assert self._is_ocp_defined
-        return self._dt_value
-
-    def get_t0(self) -> float:
-        """ Return t0.
-        """
-        assert self._is_ocp_defined
-        return self._t0
-    
-    def get_x0(self) -> np.ndarray:
-        """ Return initial state x0.
-        """
-        assert self._is_ocp_defined
-        return self._x0
-
-    def get_us_guess(self) -> np.ndarray:
-        """ Return initial guess of us.
-        """
-        assert self._is_ocp_defined
-        return self._us_guess
     
     @staticmethod
     def zero_vector(m: int) -> sym.Matrix:
@@ -606,7 +668,8 @@ class OCP:
             x: sym.Matrix, u: sym.Matrix, t:sym.Symbol,  dt: sym.Symbol, 
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
-            t0: float, x0: np.ndarray, T: float, N: int, us_guess: np.ndarray,
+            t0: float, x0: np.ndarray, T: float, N: int, 
+            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
             scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
             is_continuous=True, simplification=False):
         """ Define optimal control problem. If symbolic constatnts are included, \
@@ -643,7 +706,7 @@ class OCP:
         ocp._scalar_dict = scalar_dict
         ocp._vector_dict = vector_dict
         ocp._matrix_dict = matrix_dict
-        ocp.define(f, l, lf, g, h, t0, x0, T, N, us_guess,
+        ocp.define(f, l, lf, g, h, t0, x0, T, N, xs_guess, us_guess,
             is_continuous, simplification)
         return ocp
     
@@ -665,11 +728,11 @@ class OCP:
                 ('u_min', -20),  ('u_max', 20), ('u_eps', 0.001)])
         q = cartpole_ocp.define_vector_constant('q', [2.5, 10, 0.01, 0.01])
         r = cartpole_ocp.define_vector_constant('r', [1])
-        q_f = cartpole_ocp.define_vector_constant('q_f', [2.5, 10, 0.01, 0.01])
-        x_ref = cartpole_ocp.define_vector_constant('x_ref', [0, np.pi, 0, 0])
+        q_f = cartpole_ocp.define_vector_constant('q_{f}', [2.5, 10, 0.01, 0.01])
+        x_ref = cartpole_ocp.define_vector_constant('x_{ref}', [0, np.pi, 0, 0])
         # diagonal weight    
         Q = sym.diag(*q)
-        Qf = sym.diag(*q_f)
+        Q_f = sym.diag(*q_f)
         R = sym.diag(*r)
         # state equation
         f = cartpole_ocp.zero_vector(n_x)
@@ -685,7 +748,7 @@ class OCP:
         ])
         # cost function
         l = (x - x_ref).T * Q * (x - x_ref) + u.T * R * u + u_barrier
-        lf = (x - x_ref).T * Qf * (x - x_ref)
+        lf = (x - x_ref).T * Q_f * (x - x_ref)
         # horizon
         T = 5.0
         N = 200
@@ -693,6 +756,8 @@ class OCP:
         t0 = 0.0
         x0 = np.array([0.0, 0.0, 0.0, 0.0])
         us_guess = np.zeros((N, n_u))
-        cartpole_ocp.define_unconstrained(f, l, lf, t0, x0, T, N, us_guess, 
+        cartpole_ocp.define_unconstrained(
+            f, l, lf, t0, x0, T, N,
+            us_guess=us_guess, 
             is_continuous=True, simplification=simplification)
         return cartpole_ocp

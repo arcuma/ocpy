@@ -27,15 +27,6 @@ class DDPSolver(SolverBase):
         if init:
             self.init_solver()
 
-    def reset_guess(self, us_guess: np.ndarray=None):
-        """ Reset guess of input trajectory.
-
-        Args:
-            us_guess (np.ndarray): Guess of input trajectory.
-        """
-        if us_guess is not None:
-            self._us_guess = np.asarray(us_guess, dtype=float)
-
     def set_stop_threshold(self, stop_threshold: float=None):
         """ Set stop creteria. If expectation of cost reduction is less than this, \
             iteration stops.
@@ -54,12 +45,12 @@ class DDPSolver(SolverBase):
         """ Set solver parameters.
 
         Args:
-            max_iters (int): Number of maximum iterations.
             gamma_ini (float): Initial value of damping coefficient.
             rho_gamma (float): Increasing/decreasing factor of gamma. (>1)
             gamma_min (float): Minimum value of damp.
             gamma_max (float): Maximum value of damp.
             alphas (np.ndarray): Line search steps.
+            max_iters (int): Number of maximum iterations.
             stop_threshold (float): Stop criterion.
         """
         self.set_damping_coefficient(gamma_ini, rho_gamma, gamma_min, gamma_max)
@@ -83,11 +74,24 @@ class DDPSolver(SolverBase):
         )
         print("Initialization Done.")
 
-    def solve(self, gamma_fixed: float=None, enable_line_search: bool=True,
-              result: bool=True, log: bool=False, plot: bool=False):
+    def solve(
+            self, 
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
+            xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
+            gamma_fixed: float=None, enable_line_search: bool=True,
+            result: bool=False, log: bool=False, plot: bool=False
+        ):
         """ Solve OCP via DDP iteration.
 
         Args:
+            t0 (float): Initial time.
+            x0 (numpy.array): Initial state. Size must be n_x.
+            T (float): Horizon length.
+            N (int): Discretization grid number.
+            xs_guess (numpy.array): Guess of state trajectory. \
+                Size must be (N+1)*n_x. Only used in multiple-shooting.
+            us_guess (numpy.array): Guess of input trajectory. \
+                Size must be N*n_u.
             gamma_fixed (float): If set, damping coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
             result (bool): If true, summary of result is printed.
@@ -95,12 +99,28 @@ class DDPSolver(SolverBase):
             plot (bool): If true, graphs are generated and saved.
         
         Returns:
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): Discretized time history.
-            xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): Optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): Costs at each iteration.
             time_elapsed (float): Computational time.
+            is_success (bool): Success or not.
         """
+        if t0 is None:
+            t0 = self._t0
+        if x0 is None:
+            x0 = self._x0
+        assert x0.shape[0] == self._n_x
+        if T is None:
+            T = self._T        
+        if N is None:
+            N = self._N
+        if xs_guess is None:
+            xs_guess = self._xs_guess
+        assert xs_guess.shape == (N + 1, self._n_x)
+        if us_guess is None:
+            us_guess = self._us_guess
+        assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
             gamma_ini = self._gamma_ini
             rho_gamma = self._rho_gamma
@@ -115,11 +135,6 @@ class DDPSolver(SolverBase):
             alphas = np.array([1.0])
         max_iters = self._max_iters
         stop_threshold = self._stop_threshold
-        t0 = self._t0
-        x0 = self._x0
-        N = self._N
-        T = self._T
-        us_guess = self._us_guess
         # derivatives functions.
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
@@ -128,9 +143,9 @@ class DDPSolver(SolverBase):
         # computational time
         time_start = time.perf_counter()
         # solve
-        ts, xs, us, Js, is_success = self._solve(
+        xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         )
         # computational time
@@ -144,17 +159,17 @@ class DDPSolver(SolverBase):
                               time_elapsed)
         # log
         if log:
-            self.log_data(self._log_dir, ts, xs, us, Js)
+            self.log_data(self._log_dir, xs, us, ts, Js)
         # plot
         if plot:
-            self.plot_data(self._log_dir, ts, xs, us, Js)
-        return ts, xs, us, Js, time_elapsed
+            self.plot_data(self._log_dir, xs, us, ts, Js)
+        return xs, us, ts, Js, time_elapsed, is_success
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         ):
         """ DDP algorithm.
@@ -367,7 +382,7 @@ class DDPSolver(SolverBase):
             Js[iters] = J
         ts = np.array([t0 + i*dt for i in range(N + 1)])
         Js = Js[0:iters + 1]
-        return ts, xs, us, Js, is_success
+        return xs, us, ts, Js, is_success
     
     @staticmethod
     def print_result(solver_name: str, is_success: bool, iters: int, cost: float,
@@ -393,33 +408,33 @@ class DDPSolver(SolverBase):
         print('----------------------------------------------')
     
     @staticmethod
-    def log_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
+    def log_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
                  Js: np.ndarray):
         """ Log data.
         
         Args:
             log_dir (str): Directory where data are saved.
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): costs at each iteration.
         """
         logger = Logger(log_dir)
-        logger.save(ts, xs, us, Js)
+        logger.save(xs, us, ts, Js)
 
     @staticmethod
-    def plot_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
+    def plot_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
                   Js: np.ndarray):
         """ Plot data and save it.
         
         Args:
             log_dir (str): Directory where data are saved.
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): costs at each iteration.
         """
-        plotter = Plotter(log_dir, ts, xs, us, Js)
+        plotter = Plotter(log_dir, xs, us, ts, Js)
         plotter.plot(save=True)
 
 
@@ -447,11 +462,24 @@ class iLQRSolver(DDPSolver):
         )
         print("Initialization Done.")
 
-    def solve(self, gamma_fixed: float=None, enable_line_search: bool=True,
-              result: bool=True, log: bool=False, plot: bool=False):
+    def solve(
+            self, 
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
+            xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
+            gamma_fixed: float=None, enable_line_search: bool=True,
+            result: bool=False, log: bool=False, plot: bool=False
+        ):
         """ Solve OCP via iLQR iteration.
 
         Args:
+            t0 (float): Initial time.
+            x0 (numpy.array): Initial state. Size must be n_x.
+            T (float): Horizon length.
+            N (int): Discretization grid number.
+            xs_guess (numpy.array): Guess of state trajectory. \
+                Size must be (N+1)*n_x. Only used in multiple-shooting.
+            us_guess (numpy.array): Guess of input trajectory. \
+                Size must be N*n_u.
             gamma_fixed (float): If set, damping coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
             result (bool): If true, summary of result is printed.
@@ -459,12 +487,29 @@ class iLQRSolver(DDPSolver):
             plot (bool): If true, graphs are generated and saved.
         
         Returns:
-            ts (numpy.ndarray): Discretized time history.
             xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
             us (numpy.ndarray): Optimal control trajectory. (N * n_u)
+            ts (numpy.ndarray): Discretized time history.
             Js (numpy.ndarray): Costs at each iteration.
             time_elapsed (float): Computational time.
+            is_success (bool): Success or not.
+
         """
+        if t0 is None:
+            t0 = self._t0
+        if x0 is None:
+            x0 = self._x0
+        assert x0.shape[0] == self._n_x
+        if N is None:
+            N = self._N
+        if T is None:
+            T = self._T
+        if xs_guess is None:
+            xs_guess = self._xs_guess
+        assert xs_guess.shape == (N + 1, self._n_x)
+        if us_guess is None:
+            us_guess = self._us_guess
+        assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
             gamma_ini = self._gamma_ini
             rho_gamma = self._rho_gamma
@@ -479,11 +524,6 @@ class iLQRSolver(DDPSolver):
             alphas = np.array([1.0])
         max_iters = self._max_iters
         stop_threshold = self._stop_threshold
-        t0 = self._t0
-        x0 = self._x0
-        N = self._N
-        T = self._T
-        us_guess = self._us_guess
         # derivatives functions.
         f, fx, fu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
@@ -492,9 +532,9 @@ class iLQRSolver(DDPSolver):
         # computational time
         time_start = time.perf_counter()
         # solve
-        ts, xs, us, Js, is_success = self._solve(
+        xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         )
         # computational time
@@ -508,17 +548,17 @@ class iLQRSolver(DDPSolver):
                               time_elapsed)
         # log
         if log:
-            self.log_data(self._log_dir, ts, xs, us, Js)
+            self.log_data(self._log_dir, xs, us, ts, Js)
         # plot
         if plot:
-            self.plot_data(self._log_dir, ts, xs, us, Js)
-        return ts, xs, us, Js, time_elapsed
+            self.plot_data(self._log_dir, xs, us, ts, Js)
+        return xs, us, ts, Js, time_elapsed, is_success
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         ):
         """ iLQR algorithm.
@@ -551,7 +591,7 @@ class iLQRSolver(DDPSolver):
                           lx, lu, lxx, lux, luu, lfx, lfxx,
                           xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
                           gamma: float=1e-6):
-            """ Backward pass of DDP.
+            """ Backward pass of iLQR.
 
             Args:
                 fx (function): Derivative of f w.r.t. state x.
@@ -625,7 +665,7 @@ class iLQRSolver(DDPSolver):
         def forward_pass(f, l, lf, 
                          xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
                          ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
-            """ Forward pass of DDP.
+            """ Forward pass of iLQR.
 
             Args:
                 f (function): State function.
@@ -705,4 +745,4 @@ class iLQRSolver(DDPSolver):
             Js[iters] = J
         ts = np.array([t0 + i*dt for i in range(N + 1)])
         Js = Js[0:iters + 1]
-        return ts, xs, us, Js, is_success
+        return xs, us, ts, Js, is_success

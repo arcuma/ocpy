@@ -29,9 +29,10 @@ class SolverBase(abc.ABC):
         self._T = ocp.get_T()
         self._N = ocp.get_N()
         self._dt = self._T / self._N
-        # initial time, state and guess of us
+        # initial time, state and guess.
         self._t0 = ocp.get_t0()
         self._x0 = ocp.get_x0()
+        self._xs_guess = ocp.get_xs_guess()
         self._us_guess = ocp.get_us_guess()
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
@@ -121,17 +122,32 @@ class SolverBase(abc.ABC):
             t0 (float): Initial time of horizon.
             x0 (float): Initial state of horizon.
         """
-        if t0 is not None:
-            self._t0 = float(t0)
-        if x0 is not None:
-            self._x0 = np.array(x0, dtype=float)
+        self._ocp.reset_initial_condition(t0, x0)
+        self._t0 = self._ocp.get_t0()
+        self._x0 = self._ocp.get_x0()
     
-    @abc.abstractmethod
-    def reset_guess(self):
-        """ Reset solution guess. In single shooting, argument is (us). 
-            In multiple shooting, argument is (xs, us).
+    def reset_horizon(self, T: float=None, N: float=None):
+        """ Reset T and N.
+
+        Args:
+            T (float): Horizon length.
+            N (int): Discretization grid number.
         """
-        pass
+        self._ocp.reset_horizon(T, N)
+        self._T = self._ocp.get_T()
+        self._N = self._ocp.get_N()
+        self._dt = self._T / self._N
+
+    def reset_guess(self, xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
+        """ Reset guess of state and input trajectory.
+
+        Args:
+            xs_guess (np.ndarray): Guess of state trajectory.
+            us_guess (np.ndarray): Guess of input trajectory.
+        """
+        self._ocp.reset_guess(xs_guess, us_guess)
+        self._xs_guess = self._ocp.get_xs_guess()
+        self._us_guess = self._ocp.get_us_guess()
 
     @abc.abstractmethod
     def set_solver_parameters(self):
@@ -146,7 +162,13 @@ class SolverBase(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def solve(self):
+    def solve(
+            self,
+            t0: float=None, x0: np.ndarray=None, N: int=None, T: float=None,
+            xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
+            gamma_fixed: float=None, enable_line_search: bool=True,
+            result: bool=False, log: bool=False, plot: bool=False
+        ):
         """ Solve ocp.
         """
         pass
