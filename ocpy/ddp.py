@@ -76,7 +76,7 @@ class DDPSolver(SolverBase):
 
     def solve(
             self, 
-            t0: float=None, x0: np.ndarray=None, N: int=None, T: float=None,
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
             xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
             gamma_fixed: float=None, enable_line_search: bool=True,
             result: bool=False, log: bool=False, plot: bool=False
@@ -99,8 +99,8 @@ class DDPSolver(SolverBase):
             plot (bool): If true, graphs are generated and saved.
         
         Returns:
-            xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): Optimal control trajectory. (N * n_u)
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): Discretized time history.
             Js (numpy.ndarray): Costs at each iteration.
             time_elapsed (float): Computational time.
@@ -111,10 +111,10 @@ class DDPSolver(SolverBase):
         if x0 is None:
             x0 = self._x0
         assert x0.shape[0] == self._n_x
+        if T is None:
+            T = self._T        
         if N is None:
             N = self._N
-        if T is None:
-            T = self._T
         if xs_guess is None:
             xs_guess = self._xs_guess
         assert xs_guess.shape == (N + 1, self._n_x)
@@ -145,7 +145,7 @@ class DDPSolver(SolverBase):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         )
         # computational time
@@ -159,17 +159,17 @@ class DDPSolver(SolverBase):
                               time_elapsed)
         # log
         if log:
-            self.log_data(self._log_dir, ts, xs, us, Js)
+            self.log_data(self._log_dir, xs, us, ts, Js)
         # plot
         if plot:
-            self.plot_data(self._log_dir, ts, xs, us, Js)
+            self.plot_data(self._log_dir, xs, us, ts, Js)
         return xs, us, ts, Js, time_elapsed, is_success
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         ):
         """ DDP algorithm.
@@ -408,33 +408,33 @@ class DDPSolver(SolverBase):
         print('----------------------------------------------')
     
     @staticmethod
-    def log_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
+    def log_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
                  Js: np.ndarray):
         """ Log data.
         
         Args:
             log_dir (str): Directory where data are saved.
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): costs at each iteration.
         """
         logger = Logger(log_dir)
-        logger.save(ts, xs, us, Js)
+        logger.save(xs, us, ts, Js)
 
     @staticmethod
-    def plot_data(log_dir: str, ts: np.ndarray, xs: np.ndarray, us: np.ndarray,
+    def plot_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
                   Js: np.ndarray):
         """ Plot data and save it.
         
         Args:
             log_dir (str): Directory where data are saved.
+            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): time history.
-            xs (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us (numpy.ndarray): optimal control trajectory. (N * n_u)
             Js (numpy.ndarray): costs at each iteration.
         """
-        plotter = Plotter(log_dir, ts, xs, us, Js)
+        plotter = Plotter(log_dir, xs, us, ts, Js)
         plotter.plot(save=True)
 
 
@@ -464,7 +464,7 @@ class iLQRSolver(DDPSolver):
 
     def solve(
             self, 
-            t0: float=None, x0: np.ndarray=None, N: int=None, T: float=None,
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
             xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
             gamma_fixed: float=None, enable_line_search: bool=True,
             result: bool=False, log: bool=False, plot: bool=False
@@ -534,7 +534,7 @@ class iLQRSolver(DDPSolver):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         )
         # computational time
@@ -548,17 +548,17 @@ class iLQRSolver(DDPSolver):
                               time_elapsed)
         # log
         if log:
-            self.log_data(self._log_dir, ts, xs, us, Js)
+            self.log_data(self._log_dir, xs, us, ts, Js)
         # plot
         if plot:
-            self.plot_data(self._log_dir, ts, xs, us, Js)
+            self.plot_data(self._log_dir, xs, us, ts, Js)
         return xs, us, ts, Js, time_elapsed, is_success
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, N, T, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
             alphas, max_iters, stop_threshold
         ):
         """ iLQR algorithm.

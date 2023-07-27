@@ -20,15 +20,16 @@ class CartPoleAnimator:
         # Load data
         self._log_dir = log_dir
         self._sim_name = sim_name
-        self._ts = np.genfromtxt(join(log_dir, 't_log.txt'))
         self._xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
         self._us = np.genfromtxt(join(log_dir, 'u_log.txt'))
-        # length of us is N while xs is N + 1.
-        self._us = np.append(self._us, self._us[-1])
-        if len(self._xs.shape) == 1:
-            self._xs = self._xs.reshape(self._xs.size, 1)
-        if len(self._us.shape) == 1:
-            self._us = self._us.reshape(self._us.size, 1)
+        self._ts = np.genfromtxt(join(log_dir, 't_log.txt'))
+        if self._xs.ndim == 1:
+            self._xs = self._xs.reshape((-1, 1))
+        if self._us.ndim == 1:
+            self._us = self._us.reshape((-1, 1))
+        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN-1)
+        if self._us.shape[0] == self._xs.shape[0] - 1:
+            self._us = np.append(self._us, [self._us[-1]], axis=0)
         self._n_x = self._xs.shape[1]
         self._n_u = self._us.shape[1]
         self._N = self._ts.size - 1

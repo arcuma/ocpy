@@ -1,36 +1,48 @@
 import numpy as np
 import math
 import os
-from os.path import abspath, dirname, join
+from os.path import abspath, dirname, join, isfile
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
+import warnings
 
 
 class Plotter:
     """ Class of plotting simulation results.
     """
-    def __init__(self, log_dir: str, ts: np.ndarray,
-                 xs: np.ndarray, us: np.ndarray, J_hist: np.ndarray):
-        """ Constrctor.
+    def __init__(self, log_dir: str, 
+                 xs: np.ndarray, us: np.ndarray,  ts: np.ndarray, 
+                 Js: np.ndarray=None, kkts: np.ndarray=None):
+        """ Constractor.
 
         Args:
             log_dir (str): Direcory in which graph will be saved.
-            ts (np.ndarray): Discrete time history.
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
+            ts (np.ndarray): Discrete time history.
+            Js (numpy.ndarray): costs of each iteration.
+            kkts (numpy.ndarray): KKT error of each iteration .
         """
         # hold data
-        N = ts.size - 1        
-        self._N = N        
+        N = ts.size - 1
+        self._N_x = xs.shape[0]
+        self._N_u = us.shape[0]
+        self._N_t = ts.size
+        if self._N_t != self._N_x:
+            warnings.warn("Size of time and state is different.")
+        if self._N_u not in(self._N_x - 1, self._N_x):
+            warnings.warn("Size of input should be equal to (or 1 less than) "\
+                          "state.")
         self._log_dir = log_dir
         self._ts = ts
-        self._xs = xs if xs.ndim > 1 else xs.reshape((N + 1, 1))
-        self._us = us if us.ndim > 1 else us.reshape((N, 1))
-        self._J_hist = J_hist
+        self._xs = xs if xs.ndim > 1 else xs.reshape((-1, 1))
+        self._us = us if us.ndim > 1 else us.reshape((-1, 1))
+        self._Js = Js
+        self._kkts = kkts
         self._dtau = ts[1] - ts[0]
-        self._n_x = xs.shape[1] if xs.ndim > 1 else 1
-        self._n_u = us.shape[1] if us.ndim > 1 else 1
+        self._n_x = self._xs.shape[1]
+        self._n_u = self._us.shape[1]
         self._num_graphs = self._n_x + self._n_u + 1
         # set style
         sns.set_style('ticks')
@@ -56,21 +68,33 @@ class Plotter:
 
         Args:
             log_dir (str): Direcory in which logs are stored.
+            dat_name (str): Name of dat_vs_iters.
         """
-        ts = np.genfromtxt(join(log_dir, 't_log.txt'))
         xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
         us = np.genfromtxt(join(log_dir, 'u_log.txt'))
-        J_hist = np.genfromtxt(join(log_dir, 'J_log.txt'))
-        return Plotter(log_dir, ts, xs, us, J_hist)
+        ts = np.genfromtxt(join(log_dir, 't_log.txt'))
+        if isfile(join(join(log_dir, 'J_log.txt'))):
+            Js = np.genfromtxt(join(log_dir, 'J_log.txt'))
+        else:
+            Js = None
+        if isfile(join(join(log_dir, 'kkt_log.txt'))):
+            kkts = np.genfromtxt(join(log_dir, 'kkt_log.txt'))
+        else:
+            kkts = None
+        return Plotter(log_dir, xs, us, ts, Js, kkts)
 
     
-    def plot(self, fig_scale=3, font_scale=1, wspace_scale=0.3, hspace_scale=2,
-             show=True, save=False):
+    def plot(
+            self, fig_scale=4.0, font_scale_label=2.0, font_scale_ticks=1.3,
+            wspace_scale=1.0, hspace_scale=2.3,
+            show=True, save=False
+        ):
         """ Plotting data.
 
         Args:
             fig_scale (float): Figure scale.
-            font_scale (float): Font scale.
+            font_scale_label (float): Font scale of axis label.
+            font_scale_ticks (float): Font scale of axis ticks.
             wspace_scale (float): Horizontal space scale.
             hspace_scale (float): Vertical space scale.
             show (bool): If true, display graph.
@@ -80,17 +104,19 @@ class Plotter:
         # variables
         n_x = self._n_x
         n_u = self._n_u
-        N = self._N
+        N_x = self._N_x
+        N_u = self._N_u
+        N_t = self._N_t
         ts = self._ts
         xs = self._xs
         us = self._us
-        J_hist = self._J_hist
-        # columns of graph
+        Js = self._Js
+        kkts = self._kkts
+        # number of columns of graph
         cols = math.ceil(math.sqrt(n_x + n_u))
-        # rows of graph. 
+        # number of rows of graph. 
         rows_x = math.ceil(n_x / cols)
         rows_u = math.ceil(n_u / cols)
-        # for x, u, and J
         rows = rows_x + rows_u + 1
         # rows * cols 
         fig, axes = plt.subplots(rows, cols)
@@ -104,10 +130,13 @@ class Plotter:
             for j in range(cols):
                 idx = i*cols + j
                 if idx < n_x:
-                    axes[i][j].plot(ts, xs[:, idx])
-                    axes[i][j].set_xlabel(r'${\rm Time} [s]$')
-                    axes[i][j].set_ylabel(r'$x_{' + str(idx) + r'}$')
-                    axes[i][j].set_xlim(ts[0], ts[N])
+                    axes[i][j].plot(ts[:N_x], xs[:N_x, idx])
+                    axes[i][j].tick_params(labelsize=10*font_scale_ticks)
+                    axes[i][j].set_xlabel(r'${\rm Time} [s]$', 
+                                          fontsize=10*font_scale_label)
+                    axes[i][j].set_ylabel(r'$x_{' + str(idx) + r'}$',
+                                          fontsize=10*font_scale_label)
+                    axes[i][j].set_xlim(ts[0], ts[-1])
                 else:
                     fig.delaxes(axes[i][j])
         # control
@@ -115,23 +144,41 @@ class Plotter:
             for j in range(cols):
                 idx = (i - rows_x)*cols + j
                 if idx < n_u:
-                    axes[i][j].plot(ts[:-1], us[:, idx])
-                    axes[i][j].set_xlabel(r'${\rm Time} [s]$')
-                    axes[i][j].set_ylabel(r'$u_{' + str(idx) + r'}$')
-                    axes[i][j].set_xlim(ts[0], ts[N])
+                    axes[i][j].plot(ts[:N_u], us[:N_u, idx])
+                    axes[i][j].tick_params(labelsize=10*font_scale_ticks)
+                    axes[i][j].set_xlabel(r'${\rm Time} [s]$',
+                                          fontsize=10*font_scale_label)
+                    axes[i][j].set_ylabel(r'$u_{' + str(idx) + r'}$',
+                                          fontsize=10*font_scale_label)
+                    axes[i][j].set_xlim(ts[0], ts[-1])
                 else:
                     fig.delaxes(axes[i][j])
-        # cost value
+        # Js
         for j in range(cols):
             i = rows_x + rows_u
-            if j == 0:
-                iter = J_hist.size
-                iters = np.arange(iter)
-                axes[i][j].plot(iters, J_hist)
-                axes[i][j].set_xlabel(r'${\rm iteration}$')
-                axes[i][j].set_ylabel(r'$J$')
+            if j == 0 and Js is not None:
+                num_iters = Js.size - 1
+                arr_iters = np.arange(num_iters + 1)
+                axes[i][j].plot(arr_iters, Js)
+                axes[i][j].tick_params(labelsize=10*font_scale_ticks)
+                axes[i][j].set_xlabel(r'${\rm iteration}$',
+                                      fontsize=10*font_scale_label)
+                axes[i][j].set_ylabel(r'$J$',
+                                      fontsize=10*font_scale_label)
                 axes[i][j].set_yscale('log')
-                axes[i][j].set_xlim(0, iter-1)
+                axes[i][j].set_xlim(0, num_iters)
+                axes[i][j].xaxis.set_major_locator(MaxNLocator(integer=True))
+            elif j == 1 and kkts is not None:
+                num_iters = kkts.size - 1
+                arr_iters = np.arange(num_iters + 1)
+                axes[i][j].plot(arr_iters, kkts)
+                axes[i][j].tick_params(labelsize=10*font_scale_ticks)
+                axes[i][j].set_xlabel(r'${\rm iteration}$',
+                                      fontsize=10*font_scale_label)
+                axes[i][j].set_ylabel(r'$\rm{KKT error}$',
+                                      fontsize=10*font_scale_label)
+                axes[i][j].set_yscale('log')
+                axes[i][j].set_xlim(0, num_iters)
                 axes[i][j].xaxis.set_major_locator(MaxNLocator(integer=True))
             else:
                 fig.delaxes(axes[i][j])
@@ -144,68 +191,10 @@ class Plotter:
 
 
 # test
-if __file__ == '__main__':
-    sim_name = 'lqr'
+if __name__ == '__main__':
+    # sim_name = 'hexacopter'
+    sim_name = 'cartpole'
     log_dir = join(dirname(dirname(abspath(__file__))), 'log', sim_name)
     plotter = Plotter.from_log(log_dir)
-    plotter.plot(save=True)
-
-
-if False:
-    sim_name = 'lqr'
-    log_dir = join(dirname(dirname(abspath(__file__))), 'log')
-    # ts = np.genfromtxt(join(log_dir, sim_name, 't_log.txt'))
-    # xs = np.genfromtxt(join(log_dir, sim_name, 'x_log.txt'))
-    # us = np.genfromtxt(join(log_dir, sim_name, 'u_log.txt'))
-    # Js = np.genfromtxt(join(log_dir, sim_name, 'J_log.txt'))
-    
-    print(log_dir)
-    plotter = Plotter('lqr', log_dir)
-    num_graphs = plotter._num_graphs
-    print('num_graphs: ', num_graphs)
-
-    n_x, n_u = plotter._n_x, plotter._n_u
-    ts = plotter._ts
-    xs = plotter._xs
-    us = plotter._us
-    us = us.reshape((us.size, 1))
-    
-    J_hist = plotter._J_hist
-
-    # rows and colums of subplot
-    col = math.ceil(math.sqrt(n_x + n_u))
-    rows_x = math.ceil(n_x / col)
-    row_u = math.ceil(n_u / col)
-    row = rows_x + row_u + 1
-
-    fig, axes = plt.subplots(row, col)
-    print(row, col)
-
-    #plot
-    # state
-    for i in range(rows_x):
-        for j in range(col):
-            idx = i*col + j
-            if idx < n_x:
-                axes[i][j].plot(ts, xs[:, idx])
-            else:
-                fig.delaxes(axes[i][j])
-    # control
-    for i in range(rows_x, rows_x + row_u):
-        for j in range(col):
-            idx = (i - rows_x)*col + j
-            if idx < n_u:
-                axes[i][j].plot(ts[:-1], us[:, idx])
-            else:
-                fig.delaxes(axes[i][j])
-    # cost value
-    for j in range(col):
-        i = rows_x + row_u
-        if j == 0:
-            iter = J_hist.size
-            iters = np.arange(iter)
-            axes[i][j].plot(iters, J_hist)
-        else:
-            fig.delaxes(axes[i][j])
-    plt.show()
-    
+    plotter.plot(save=False)
+    print('a')
