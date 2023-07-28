@@ -7,6 +7,8 @@ Optimal control problem (OCP) solver implemented in Python.
 
 are currently implemented.
 
+You can also perform model predictive control (MPC) using these optimal control solver. Class for MPC is implemented.
+
 ## Requirements
 - Python3
   - SymPy
@@ -16,12 +18,31 @@ are currently implemented.
   - Matplotlib
   - seaborn
 
+## Usage
+1. Clone or Download.
+   ``` sh
+   git clone https://github.com/arcuma/ocpy.git
+   ```
+   or "Code" >> "Download ZIP" on this page.
+
+1. Install Requirements.
+   ``` sh
+   pip3 install -r requirements.txt
+   ```
+1. Run examples below.
+
 ## Examples
+- OCP
 ```txt
-lqr.ipynb (while this can be solved easily by DARE)
+lqr.ipynb
 cartpole.ipynb
 hexacopter.ipynb
 ```
+- MPC
+``` txt
+cartpole_mpc.ipynb
+```
+
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
 
 ## References
