@@ -64,14 +64,14 @@ class MPC:
         self._us_guess = us
 
     def run(self, T_sim: float=20, sampling_time: float=0.005,
-            max_iters_mpc: int=3, result=True, log=True, plot=True):
+            max_iters_mpc: int=5, result=True, log=True, plot=True):
         """ Run MPC.
 
         Args:
             T_sim (float): Simulation time.
             sampling_time (float): Sampling time. OCP must be solved within \
                 sampling time.
-            max_iters (int): Maximum iteration number of each OCP.
+            mpc_max_iters (int): Maximum iteration number of OCP at each samping.
         
         Returns:
             xs_real (numpy.ndarray): optimal state trajectory. (N * n_x)
@@ -87,8 +87,8 @@ class MPC:
         f = self._f
         assert T_sim > 0
         assert sampling_time > 0
-        ts_real = np.arange(t, t + T_sim, sampling_time)
-        N_sim = len(ts_real) - 1
+        self._solver.set_max_iters(max_iters_mpc)
+        ts_real = np.arange(t, t + T_sim + sampling_time*1e-6, sampling_time)
         # record real trajectory of state and control.
         xs_real = []
         us_real = []
@@ -96,7 +96,7 @@ class MPC:
         # MPC
         for t in ts_real:
             xs_opt, us_opt, *_, ctime, _ = self._solver.solve(
-                t, x, T, N, xs_guess, us_guess, gamma_fixed=1e-3*0
+                t, x, T, N, xs_guess, us_guess
             )
             # In MPC, it uses initial value of optimal input trajectory.
             u = us_opt[0]
