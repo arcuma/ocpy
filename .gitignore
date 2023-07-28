@@ -4,11 +4,13 @@ __pycache__/
 ocpy/riccati_recursion.py
 rl_cartpole.ipynb
 log/
+log_mpc/
 test/
 sympy_test/
 cartpole_copy.ipynb
 test.ipynb
 memo.md
+tempCodeRunnerFile.py
 *.db
 *.egg-info
 *.log

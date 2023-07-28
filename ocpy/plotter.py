@@ -14,7 +14,7 @@ class Plotter:
     def __init__(self, log_dir: str, 
                  xs: np.ndarray, us: np.ndarray,  ts: np.ndarray, 
                  Js: np.ndarray=None, kkts: np.ndarray=None):
-        """ Constractor.
+        """ Constructor.
 
         Args:
             log_dir (str): Direcory in which graph will be saved.
