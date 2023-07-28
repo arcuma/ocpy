@@ -15,7 +15,7 @@ class SolverBase(abc.ABC):
     """ Abstract solver class.
     """
     def __init__(self, ocp: OCP):
-        """ Init, supposing unconstrained Newton-type method.
+        """ Constructor. Supposing unconstrained Newton-type method.
         """
         self._ocp = ocp
         self._sim_name = ocp.get_ocp_name()
@@ -164,7 +164,7 @@ class SolverBase(abc.ABC):
     @abc.abstractmethod
     def solve(
             self,
-            t0: float=None, x0: np.ndarray=None, N: int=None, T: float=None,
+            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
             xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
             gamma_fixed: float=None, enable_line_search: bool=True,
             result: bool=False, log: bool=False, plot: bool=False
