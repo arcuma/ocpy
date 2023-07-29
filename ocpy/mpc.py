@@ -95,7 +95,7 @@ class MPC:
         total_ctime = 0.0
         # MPC
         for t in ts_real:
-            xs_opt, us_opt, *_, ctime, _ = self._solver.solve(
+            xs_opt, us_opt, *_, ctime = self._solver.solve(
                 t, x, T, N, xs_guess, us_guess
             )
             # In MPC, it uses initial value of optimal input trajectory.

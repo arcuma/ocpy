@@ -27,36 +27,26 @@ class DDPSolver(SolverBase):
         if init:
             self.init_solver()
 
-    def set_stop_threshold(self, stop_threshold: float=None):
-        """ Set stop creteria. If expectation of cost reduction is less than this, \
-            iteration stops.
-
-        Args:
-            stop_threshold (float): Stop creterion
-        """
-        if stop_threshold is not None:
-            self._stop_threshold = stop_threshold
-
     def set_solver_parameters(
-            self, gamma_ini: float=None, rho_gamma: float=None,
+            self, gamma_init: float=None, rho_gamma: float=None,
             gamma_min: float=None,  gamma_max: float=None, alphas: np.ndarray=None, 
-            max_iters: int=None, stop_threshold: float=None
+            stop_tol: float=None, max_iters: int=None, 
         ):
         """ Set solver parameters.
 
         Args:
-            gamma_ini (float): Initial value of damping coefficient.
+            gamma_init (float): Initial value of damping coefficient.
             rho_gamma (float): Increasing/decreasing factor of gamma. (>1)
             gamma_min (float): Minimum value of damp.
             gamma_max (float): Maximum value of damp.
             alphas (np.ndarray): Line search steps.
+            stop_tol (float): Stop threshold.
             max_iters (int): Number of maximum iterations.
-            stop_threshold (float): Stop criterion.
         """
-        self.set_damping_coefficient(gamma_ini, rho_gamma, gamma_min, gamma_max)
+        self.set_damping_coefficient(gamma_init, rho_gamma, gamma_min, gamma_max)
         self.set_alphas(alphas)
+        self.set_stop_tol(stop_tol)
         self.set_max_iters(max_iters)
-        self.set_stop_threshold(stop_threshold)
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
@@ -65,12 +55,12 @@ class DDPSolver(SolverBase):
         # caching
         self._solve(
             *self._df, *self._dl, 
-            t0=self._t0, x0=self._x0, N=self._N, T=self._T,
+            t0=self._t0, x0=self._x0, T=self._T, N=self._N,
             us_guess=self._us_guess, 
-            gamma_ini=self._gamma_ini, rho_gamma=self._rho_gamma,
+            gamma_init=self._gamma_init, rho_gamma=self._rho_gamma,
             gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
             alphas=self._alphas,
-            max_iters=10, stop_threshold=self._stop_threshold
+            stop_tol=self._stop_tol, max_iters=10
         )
         print("Initialization Done.")
 
@@ -122,19 +112,19 @@ class DDPSolver(SolverBase):
             us_guess = self._us_guess
         assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
-            gamma_ini = self._gamma_ini
+            gamma_init = self._gamma_init
             rho_gamma = self._rho_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
-            gamma_ini =  gamma_min = gamma_max = gamma_fixed
+            gamma_init =  gamma_min = gamma_max = gamma_fixed
             rho_gamma = 1.0
         if enable_line_search:
             alphas = self._alphas
         else:
             alphas = np.array([1.0])
+        stop_tol = self._stop_tol    
         max_iters = self._max_iters
-        stop_threshold = self._stop_threshold
         # derivatives functions.
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
@@ -145,8 +135,8 @@ class DDPSolver(SolverBase):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
-            alphas, max_iters, stop_threshold
+            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            alphas, stop_tol, max_iters
         )
         # computational time
         time_end = time.perf_counter()
@@ -163,14 +153,14 @@ class DDPSolver(SolverBase):
         # plot
         if plot:
             self.plot_data(self._log_dir, xs, us, ts, Js)
-        return xs, us, ts, Js, time_elapsed, is_success
+        return xs, us, ts, Js, is_success, time_elapsed
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
-            alphas, max_iters, stop_threshold
+            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            alphas, stop_tol, max_iters
         ):
         """ DDP algorithm.
         """
@@ -262,7 +252,7 @@ class DDPSolver(SolverBase):
             Vx = lfx(xs[N], t0 + T)
             Vxx = lfxx(xs[N], t0 + T)
             # expected cost cahnge of all stage
-            delta_V = 0
+            delta_V = 0.0
             # daming matrix
             Reg = gamma * np.eye(n_u)
             for i in range(N - 1, -1, -1):
@@ -292,7 +282,7 @@ class DDPSolver(SolverBase):
                 K = -Quu_inv @ Qux
                 ks[i] = k
                 Ks[i] = K
-                # value function of stage i, passed to i-1.
+                # value function of stage i, passed to stage i-1.
                 delta_V_i = 0.5 * k.T @ Quu @ k + k.T @ Qu
                 Vx = Qx - K.T @ Quu @ k
                 Vxx = Qxx - K.T @ Quu @ K
@@ -345,7 +335,7 @@ class DDPSolver(SolverBase):
         xs, J = rollout(f, l, lf, x0, us, t0, dt)
         Js = np.zeros(max_iters + 1, dtype=float)
         Js[0] = J
-        gamma = gamma_ini
+        gamma = gamma_init
         is_success = False
         # main iteration
         for iters in range(1, max_iters + 1):
@@ -354,7 +344,7 @@ class DDPSolver(SolverBase):
                 fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, gamma
             )
-            if np.abs(delta_V) < stop_threshold:
+            if np.abs(delta_V) < stop_tol:
                 is_success = True
                 iters -= 1
                 break
@@ -453,12 +443,12 @@ class iLQRSolver(DDPSolver):
         # caching
         self._solve(
             *self._df, *self._dl, 
-            t0=self._t0, x0=self._x0, N=self._N, T=self._T,
+            t0=self._t0, x0=self._x0, T=self._T, N=self._N,
             us_guess=self._us_guess, 
-            gamma_ini=self._gamma_ini, rho_gamma=self._rho_gamma,
+            gamma_init=self._gamma_init, rho_gamma=self._rho_gamma,
             gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
             alphas=self._alphas,
-            max_iters=10, stop_threshold=self._stop_threshold
+            stop_tol=self._stop_tol, max_iters=10,
         )
         print("Initialization Done.")
 
@@ -511,19 +501,19 @@ class iLQRSolver(DDPSolver):
             us_guess = self._us_guess
         assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
-            gamma_ini = self._gamma_ini
+            gamma_init = self._gamma_init
             rho_gamma = self._rho_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
-            gamma_ini =  gamma_min = gamma_max = gamma_fixed
+            gamma_init =  gamma_min = gamma_max = gamma_fixed
             rho_gamma = 1.0
         if enable_line_search:
             alphas = self._alphas
         else:
             alphas = np.array([1.0])
+        stop_tol = self._stop_tol
         max_iters = self._max_iters
-        stop_threshold = self._stop_threshold
         # derivatives functions.
         f, fx, fu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
@@ -534,8 +524,8 @@ class iLQRSolver(DDPSolver):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
-            alphas, max_iters, stop_threshold
+            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            alphas, stop_tol, max_iters
         )
         # computational time
         time_end = time.perf_counter()
@@ -552,14 +542,14 @@ class iLQRSolver(DDPSolver):
         # plot
         if plot:
             self.plot_data(self._log_dir, xs, us, ts, Js)
-        return xs, us, ts, Js, time_elapsed, is_success
+        return xs, us, ts, Js, is_success, time_elapsed
 
     @staticmethod
     @numba.njit
     def _solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_ini, rho_gamma, gamma_min, gamma_max,
-            alphas, max_iters, stop_threshold
+            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            alphas, stop_tol, max_iters
         ):
         """ iLQR algorithm.
         """
@@ -628,7 +618,7 @@ class iLQRSolver(DDPSolver):
             Vx = lfx(xs[N], t0 + T)
             Vxx = lfxx(xs[N], t0 + T)
             # expected cost cahnge of all stage
-            delta_V = 0
+            delta_V = 0.0
             # daming matrix
             Reg = gamma * np.eye(n_u)
             for i in range(N - 1, -1, -1):
@@ -655,7 +645,7 @@ class iLQRSolver(DDPSolver):
                 K = -Quu_inv @ Qux
                 ks[i] = k
                 Ks[i] = K
-                # value function of stage i, passed to i-1.
+                # value function of stage i, passed to stage i-1.
                 delta_V_i = 0.5 * k.T @ Quu @ k + k.T @ Qu
                 Vx = Qx - K.T @ Quu @ k
                 Vxx = Qxx - K.T @ Quu @ K
@@ -708,7 +698,7 @@ class iLQRSolver(DDPSolver):
         xs, J = rollout(f, l, lf, x0, us, t0, dt)
         Js = np.zeros(max_iters + 1, dtype=float)
         Js[0] = J
-        gamma = gamma_ini
+        gamma = gamma_init
         is_success = False
         # main iteration
         for iters in range(1, max_iters + 1):
@@ -717,7 +707,7 @@ class iLQRSolver(DDPSolver):
                 fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 xs, us, t0, dt, gamma
             )
-            if np.abs(delta_V) < stop_threshold:
+            if np.abs(delta_V) < stop_tol:
                 is_success = True
                 iters -= 1
                 break

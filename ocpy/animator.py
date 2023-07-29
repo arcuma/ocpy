@@ -52,18 +52,22 @@ class CartPoleAnimator:
         self._y_max = +scale * (1-r) * aspect
         # frame skip rate
         self._skip_rate = 1
-        self._play_frames = (int)(self._ts.size / self._skip_rate)
+        self._total_frames = (int)(self._ts.size / self._skip_rate)
 
     
-    def generate_animation(self, save=True):
+    def generate_animation(self, save=True, skip_rate: int=1):
         """ Genarating animation.
 
         Args:
+            skip_rate (int): Skip rate.
             save (bool): If True, animation is saved to log_dir.
         """
+        # frame skip
+        self._skip_rate = skip_rate
+        self._total_frames = (int)(self._ts.shape[0] / skip_rate)
         self._fig = plt.figure(figsize=(16, 9))
         self._ax = plt.axes(xlim=(self._x_min, self._x_max),
-                      ylim=(self._y_min, self._y_max))
+                            ylim=(self._y_min, self._y_max))
         # 1:1 aspect ration
         self._ax.set_aspect('equal')
         state = self._xs[0, :]
@@ -129,15 +133,15 @@ class CartPoleAnimator:
         anim = FuncAnimation(
             self._fig,
             self._update_animation,
-            frames=self._play_frames,
+            frames=self._total_frames,
             interval=1000*self._dtau*self._skip_rate,
             blit=True
             )
         # save movie
         if save:
             anim.save(join(self._log_dir, self._sim_name) + '.mp4', dpi=120,
-            writer='ffmpeg',
-            fps=int(1/(self._dtau * self._skip_rate))
+                      writer='ffmpeg',
+                      fps=int(1/(self._dtau * self._skip_rate))
             )
             print('Animation was saved at ' + self._log_dir + ' .')
         plt.show()
