@@ -37,13 +37,13 @@ class SolverBase(abc.ABC):
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
         # damping value.
-        self._gamma_ini = 1e-3
+        self._gamma_init = 1e-3
         self._rho_gamma = 10.0
         self._gamma_min = 1e-8
         self._gamma_max = 1e+6
         # solver parameters
+        self._stop_tol = 1e-3
         self._max_iters = 500
-        self._stop_threshold = 1e-3
         # flag
         self._is_single_shooting = True
         self._initialized = False
@@ -78,18 +78,18 @@ class SolverBase(abc.ABC):
         """
         return self._log_dir
     
-    def set_damping_coefficient(self, gamma_ini: float=None, rho_gamma: float=None,
+    def set_damping_coefficient(self, gamma_init: float=None, rho_gamma: float=None,
                                 gamma_min: float=None, gamma_max: float=None):
         """ Set gammaing coefficient of Newton method.
         
         Args: 
-            gamma_ini (float): Initial value of damping coefficient.
+            gamma_init (float): Initial value of damping coefficient.
             rho_gamma (float): Increasing/decreasing factor of gamma. (>=1)
             gamma_min (float): Minimum value of damp.
             gamma_max (float): Maximum value of damp.
         """
-        if gamma_ini is not None:
-            self._gamma_ini = gamma_ini
+        if gamma_init is not None:
+            self._gamma_init = gamma_init
         if rho_gamma is not None:
             self._rho_gamma = rho_gamma
         if gamma_min is not None:
@@ -106,6 +106,15 @@ class SolverBase(abc.ABC):
         if alphas is not None:
             self._alphas = np.array(alphas, dtype=float)
 
+    def set_stop_tol(self, stop_tol: float=None):
+        """ Set stop tolerance.
+
+        Args:
+            stop_tol (float): Stop threshold.
+        """
+        if stop_tol is not None:
+            self._stop_tol = stop_tol
+
     def set_max_iters(self, max_iters: int=None):
         """ Set number of maximum iteration.
         
@@ -113,6 +122,7 @@ class SolverBase(abc.ABC):
             max_iters (int): Number of maximum iteration.
         """
         if max_iters is not None:
+            assert max_iters > 0
             self._max_iters = max_iters    
 
     def reset_initial_condition(self, t0: float=None, x0: np.ndarray=None):
