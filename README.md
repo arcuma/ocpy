@@ -45,6 +45,8 @@ cartpole_mpc.ipynb
 
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
 
+https://github.com/arcuma/ocpy/assets/67198327/8829f420-46f0-4b6c-b0a9-57a556cdf8be
+
 ## References
 1. [D. H. Jacobson and D. Q. Mayne, Differential Dynamic Programming, Elsevier, 1970.](https://doi.org/10.1016/B978-0-12-012710-8.50010-8)
 
