@@ -23,6 +23,7 @@ class SymDynamics:
         fxx = symutils.diff_matrix(fx, x)
         fux = symutils.diff_matrix(fu, x)
         fuu = symutils.diff_matrix(fu, u)
+
         self.f   = f
         self.fx  = fx
         self.fu  = fu
@@ -50,6 +51,7 @@ class SymDynamics:
             continuous (bool): Is continous model.
         """
         assert f.shape == x.shape
+
         symdyn = SymDynamics(t, x, u, sym.zeros(*x.shape))
         symdyn.f   = f
         symdyn.fx  = fx
@@ -117,11 +119,13 @@ class NumDynamics:
             Confirm all symbolic constants (e.g. mass, lentgth,) are substituted.
         """
         df_sym = [f_sym, fx_sym, fu_sym, fxx_sym, fux_sym, fuu_sym]
+
         df = []
         for i, func_sym in enumerate(df_sym):
             args = [x, u, t]
             dim_reduction = True if i == 0 else False
-            df.append(symutils.lambdify(args, func_sym, dim_reduction))        
+            df.append(symutils.lambdify(args, func_sym, dim_reduction))
+      
         self.f   = df[0]
         self.fx  = df[1]
         self.fu  = df[2]

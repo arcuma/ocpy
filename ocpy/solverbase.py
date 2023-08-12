@@ -15,7 +15,7 @@ class SolverBase(abc.ABC):
     """ Abstract solver class.
     """
     def __init__(self, ocp: OCP):
-        """ Constructor. Supposing unconstrained Newton-type method.
+        """ Constructor. Supposing unconstrained single-shooting Newton-type method.
         """
         self._ocp = ocp
         self._sim_name = ocp.get_ocp_name()
@@ -32,11 +32,10 @@ class SolverBase(abc.ABC):
         # initial time, state and guess.
         self._t0 = ocp.get_t0()
         self._x0 = ocp.get_x0()
-        self._xs_guess = ocp.get_xs_guess()
-        self._us_guess = ocp.get_us_guess()
+        self._us_guess = np.zeros((self._N, self._n_u))
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
-        # damping value.
+        # regularization value.
         self._gamma_init = 1e-3
         self._rho_gamma = 10.0
         self._gamma_min = 1e-8
@@ -68,6 +67,7 @@ class SolverBase(abc.ABC):
         Args:
             log_dir (str): Log directory.
         """
+        assert isinstance(log_dir, str)
         self._log_dir = log_dir
 
     def get_log_directory(self) -> str:
@@ -78,15 +78,15 @@ class SolverBase(abc.ABC):
         """
         return self._log_dir
     
-    def set_damping_coefficient(self, gamma_init: float=None, rho_gamma: float=None,
-                                gamma_min: float=None, gamma_max: float=None):
-        """ Set gammaing coefficient of Newton method.
+    def set_regularization_coeff(self, gamma_init: float=None, rho_gamma: float=None,
+                                 gamma_min: float=None, gamma_max: float=None):
+        """ Set regularization parameters of Newton method.
         
         Args: 
-            gamma_init (float): Initial value of damping coefficient.
-            rho_gamma (float): Increasing/decreasing factor of gamma. (>=1)
-            gamma_min (float): Minimum value of damp.
-            gamma_max (float): Maximum value of damp.
+            gamma_init (float): Initial value of regularization coefficient.
+            rho_gamma (float >= 1): Increasing/decreasing factor of gamma.
+            gamma_min (float): Minimum value of gamma.
+            gamma_max (float): Maximum value of gamma.
         """
         if gamma_init is not None:
             self._gamma_init = gamma_init
@@ -98,7 +98,7 @@ class SolverBase(abc.ABC):
             self._gamma_max = gamma_max
 
     def set_alphas(self, alphas: np.ndarray=None):
-        """ Set alphas: candidates of step size of line search.
+        """ Set alphas; candidates of step size of line search.
         
         Args: 
             alphas (np.ndarray): Array of alpha.  0 <= alpha_i <= 1.0.
@@ -125,39 +125,54 @@ class SolverBase(abc.ABC):
             assert max_iters > 0
             self._max_iters = max_iters    
 
-    def reset_initial_condition(self, t0: float=None, x0: np.ndarray=None):
+    def set_initial_condition(self, t0: float=None, x0: np.ndarray=None):
         """ Reset t0 and x0.
 
         Args:
-            t0 (float): Initial time of horizon.
-            x0 (float): Initial state of horizon.
+            t0 (float): Initial time.
+            x0 (float): Initial state.
         """
-        self._ocp.reset_initial_condition(t0, x0)
-        self._t0 = self._ocp.get_t0()
-        self._x0 = self._ocp.get_x0()
+        if t0 is not None:
+            self._t0 = float(t0)
+        if x0 is not None:
+            x0 = np.array(x0, dtype=float).reshape(-1)
+            assert x0.shape == (self._n_x,)
+            self._x0 = x0
     
-    def reset_horizon(self, T: float=None, N: float=None):
+    def set_horizon(self, T: float=None, N: float=None):
         """ Reset T and N.
 
         Args:
-            T (float): Horizon length.
-            N (int): Discretization grid number.
+            T (float > 0): Horizon length.
+            N (int > 0): Discretization grid number.
+
+        Note:
+            If horison is changed, guess must be changed. \
+            Use reset_guess().
         """
-        self._ocp.reset_horizon(T, N)
-        self._T = self._ocp.get_T()
-        self._N = self._ocp.get_N()
+        if T is not None:
+            assert T > 0
+            self._T = float(T)
+        if N is not None:
+            assert N > 0
+            self._N = N
         self._dt = self._T / self._N
 
-    def reset_guess(self, xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
-        """ Reset guess of state and input trajectory.
+    def set_guess(self, us_guess: np.ndarray=None):
+        """ Set initial guess of input trajectory.
 
         Args:
-            xs_guess (np.ndarray): Guess of state trajectory.
-            us_guess (np.ndarray): Guess of input trajectory.
+            us_guess (np.ndarray): Guess of input trajectory. N*n_u.
         """
-        self._ocp.reset_guess(xs_guess, us_guess)
-        self._xs_guess = self._ocp.get_xs_guess()
-        self._us_guess = self._ocp.get_us_guess()
+        if us_guess is not None:
+            us_guess = np.asarray(us_guess, dtype=float)
+            assert us_guess.shape == (self._N, self._n_u)
+        self._us_guess = us_guess
+
+    def reset_guess(self):
+        """ Reset guess to zero.
+        """
+        self._us_guess = np.zeros((self._N, self._n_u))
 
     @abc.abstractmethod
     def set_solver_parameters(self):
@@ -174,8 +189,6 @@ class SolverBase(abc.ABC):
     @abc.abstractmethod
     def solve(
             self,
-            t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
-            xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
             gamma_fixed: float=None, enable_line_search: bool=True,
             result: bool=False, log: bool=False, plot: bool=False
         ):
@@ -183,7 +196,6 @@ class SolverBase(abc.ABC):
         """
         pass
 
-    @staticmethod
     @abc.abstractmethod
     def print_result():
         pass
