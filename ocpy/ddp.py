@@ -96,7 +96,7 @@ class DDPSolver(SolverBase):
         self.solve(gamma_fixed=1e3)
         self._max_iters = tmp
 
-        print("Initialization Done.")
+        print("Initialization done.")
 
     def solve(
             self,
@@ -231,12 +231,6 @@ class DDPSolver(SolverBase):
                 iters -= 1
                 break
 
-            if delta_V > 0:
-                gamma *= rho_gamma
-                Js[iters] = J
-                gammas[iters] = gamma
-                continue
-
             # line search 
             for alpha in alphas:
                 # forward pass
@@ -244,14 +238,17 @@ class DDPSolver(SolverBase):
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
                 if J_new < J:
-                    xs = xs_new
-                    us = us_new
-                    J = J_new
                     gamma /= rho_gamma
                     break
             else:
                 gamma *= rho_gamma
+
+            # update trajectory
+            xs = xs_new
+            us = us_new
+            J = J_new
     
+            # clip gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
 
             Js[iters] = J
@@ -294,10 +291,10 @@ class DDPSolver(SolverBase):
         
         Args:
             log_dir (str): Directory where data are saved.
-            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
-            us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
-            Js (numpy.ndarray): costs at each iteration.
+            xs (numpy.ndarray): Optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): Optimal control trajectory. N * n_u
+            ts (numpy.ndarray): Time history.
+            Js (numpy.ndarray): Costs at each iteration.
         """
         logger = Logger(log_dir)
         logger.save(xs, us, ts, Js)
@@ -309,10 +306,10 @@ class DDPSolver(SolverBase):
         
         Args:
             log_dir (str): Directory where data are saved.
-            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
-            us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
-            Js (numpy.ndarray): costs at each iteration.
+            xs (numpy.ndarray): Optimal state trajectory. (N + 1) * n_x
+            us (numpy.ndarray): Optimal control trajectory. N * n_u
+            ts (numpy.ndarray): Time history.
+            Js (numpy.ndarray): Costs at each iteration.
         """
         plotter = Plotter(log_dir, xs, us, ts, Js)
         plotter.plot(save=True)
