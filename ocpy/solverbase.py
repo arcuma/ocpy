@@ -29,23 +29,28 @@ class SolverBase(abc.ABC):
         self._T = ocp.get_T()
         self._N = ocp.get_N()
         self._dt = self._T / self._N
-        # initial time, state and guess.
+        # initial time and state
         self._t0 = ocp.get_t0()
         self._x0 = ocp.get_x0()
-        self._us_guess = np.zeros((self._N, self._n_u))
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
         # regularization value.
         self._gamma_init = 1e-3
-        self._rho_gamma = 10.0
+        self._rho_gamma = 5.0
         self._gamma_min = 1e-8
         self._gamma_max = 1e+6
         # solver parameters
-        self._stop_tol = 1e-3
-        self._max_iters = 500
+        self._max_iters = 1000
         # flag
         self._is_single_shooting = True
         self._initialized = False
+        # optimal trajectory
+        self._xs_opt = np.ndarray(0)
+        self._us_opt = np.ndarray(0)
+        # time grids
+        self._ts = np.ndarray(0)
+        # result (computation time, cost history, ...)
+        self._result = {}
         # derivatives of functions
         self._df = ocp.get_df()
         self._dl = ocp.get_dl()
@@ -73,7 +78,7 @@ class SolverBase(abc.ABC):
     def get_log_directory(self) -> str:
         """ Get directory path where data are logged.
 
-        Args:
+        Returns:
             log_dir (str): Log directory.
         """
         return self._log_dir
@@ -106,15 +111,6 @@ class SolverBase(abc.ABC):
         if alphas is not None:
             self._alphas = np.array(alphas, dtype=float)
 
-    def set_stop_tol(self, stop_tol: float=None):
-        """ Set stop tolerance.
-
-        Args:
-            stop_tol (float): Stop threshold.
-        """
-        if stop_tol is not None:
-            self._stop_tol = stop_tol
-
     def set_max_iters(self, max_iters: int=None):
         """ Set number of maximum iteration.
         
@@ -123,7 +119,7 @@ class SolverBase(abc.ABC):
         """
         if max_iters is not None:
             assert max_iters > 0
-            self._max_iters = max_iters    
+            self._max_iters = max_iters
 
     def set_initial_condition(self, t0: float=None, x0: np.ndarray=None):
         """ Reset t0 and x0.
@@ -158,28 +154,54 @@ class SolverBase(abc.ABC):
             self._N = N
         self._dt = self._T / self._N
 
-    def set_guess(self, us_guess: np.ndarray=None):
-        """ Set initial guess of input trajectory.
+    def get_xs_opt(self):
+        """ Get optimal state trajectory.
 
-        Args:
-            us_guess (np.ndarray): Guess of input trajectory. N*n_u.
+        Returns:
+            xs_opt (np.ndarray): Optimal state trajectory.
         """
-        if us_guess is not None:
-            us_guess = np.asarray(us_guess, dtype=float)
-            assert us_guess.shape == (self._N, self._n_u)
-        self._us_guess = us_guess
+        return self._xs_opt
+    
+    def get_us_opt(self):
+        """ Get optimal input trajectory.
 
+        Returns:
+            us_opt (np.ndarray): Optimal input trajectory.
+        """
+        return self._us_opt
+
+    def get_result(self):
+        """ Get result.
+
+        Returns:
+            result (dict): result.
+        """
+        return self._result
+
+    @abc.abstractmethod
+    def set_guess(self, us_guess: np.ndarray=None):
+        """ Set initial guess.
+        """
+        pass
+
+    @abc.abstractmethod
     def reset_guess(self):
         """ Reset guess to zero.
         """
-        self._us_guess = np.zeros((self._N, self._n_u))
+        pass
+
+    @abc.abstractmethod
+    def set_stop_tol(self, stop_tol: float=None):
+        """ Set stop tolerance.
+        """
+        pass
 
     @abc.abstractmethod
     def set_solver_parameters(self):
         """ Set solver parameters.
         """
         pass
-
+    
     @abc.abstractmethod
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().

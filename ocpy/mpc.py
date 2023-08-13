@@ -112,7 +112,7 @@ class MPC:
         # convert into numpy
         xs_real = np.array(xs_real, dtype=float)
         us_real = np.array(us_real, dtype=float)
-        # average computational time
+        # average computation time
         ave_ctime = total_ctime / len(ts_real)
         if result:
            self.print_result(self._solver._solver_name, x, ave_ctime) 
@@ -156,11 +156,11 @@ class MPC:
         Args:
             is_success (bool): Flag of success or failure.
             iters (int): Number of iterations.
-            computational_time (float): total computational time.
+            computation_time (float): total computation time.
         """
         print('------------------- RESULT -------------------')
         print(f'Final state: {x}')
-        print(f'Average computational time: {ave_ctime} [s]')
+        print(f'Average computation time: {ave_ctime} [s]')
         print('----------------------------------------------')
 
     @staticmethod

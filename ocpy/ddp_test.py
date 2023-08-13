@@ -93,7 +93,7 @@ class DDPSolver(SolverBase):
             us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): Discretized time history.
             Js (numpy.ndarray): Costs at each iteration.
-            time_elapsed (float): Computational time.
+            time_elapsed (float): computation time.
             is_success (bool): Success or not.
         """
         if t0 is None:
@@ -130,7 +130,7 @@ class DDPSolver(SolverBase):
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
         # success flag of solver.
         is_success = False
-        # computational time
+        # computation time
         time_start = time.perf_counter()
         # solve
         xs, us, ts, Js, is_success = self._solve(
@@ -138,7 +138,7 @@ class DDPSolver(SolverBase):
             t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         )
-        # computational time
+        # computation time
         time_end = time.perf_counter()
         time_elapsed = time_end - time_start
         # number of iterations
@@ -376,13 +376,13 @@ class DDPSolver(SolverBase):
     
     @staticmethod
     def print_result(solver_name: str, is_success: bool, iters: int, cost: float,
-                     computational_time: float):
+                     computation_time: float):
         """ Print summary of result.
         
         Args:
             is_success (bool): Flag of success or failure.
             iters (int): Number of iterations.
-            computational_time (float): total computational time.
+            computation_time (float): total computation time.
         """
         print('------------------- RESULT -------------------')
         print(f'solver: {solver_name}')
@@ -393,8 +393,8 @@ class DDPSolver(SolverBase):
         print(f'status: {status}')
         print(f'iteration: {iters}')
         print(f'cost value: {cost}')
-        print(f'computational time: {computational_time} [s]')
-        print(f'per update : {computational_time / iters} [s]')
+        print(f'computation time: {computation_time} [s]')
+        print(f'per update : {computation_time / iters} [s]')
         print('----------------------------------------------')
     
     @staticmethod
@@ -481,7 +481,7 @@ class iLQRSolver(DDPSolver):
             us (numpy.ndarray): Optimal control trajectory. (N * n_u)
             ts (numpy.ndarray): Discretized time history.
             Js (numpy.ndarray): Costs at each iteration.
-            time_elapsed (float): Computational time.
+            time_elapsed (float): computation time.
             is_success (bool): Success or not.
 
         """
@@ -519,7 +519,7 @@ class iLQRSolver(DDPSolver):
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
         # success flag of solver.
         is_success = False
-        # computational time
+        # computation time
         time_start = time.perf_counter()
         # solve
         xs, us, ts, Js, is_success = self._solve(
@@ -527,7 +527,7 @@ class iLQRSolver(DDPSolver):
             t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         )
-        # computational time
+        # computation time
         time_end = time.perf_counter()
         time_elapsed = time_end - time_start
         # number of iterations

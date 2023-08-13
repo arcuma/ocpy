@@ -25,8 +25,44 @@ class DDPSolver(SolverBase):
         super().__init__(ocp)
         self._solver_name = 'DDP'
         self._is_ddp = ddp
+
+        # tolerance (stop condition)
+        self._stop_tol = 1e-3
+
+        self._us_guess = np.zeros((self._N, self._n_u))
+
+        self._result['success'] = None
+        self._result['NOI'] = None
+        self._result['Js'] = None
+        self._result['computation time'] = None
+
         if init:
             self.init_solver()
+
+    def set_guess(self, us_guess: np.ndarray=None):
+        """ Set initial guess of input trajectory.
+
+        Args:
+            us_guess (np.ndarray): Guess of input trajectory. N*n_u.
+        """
+        if us_guess is not None:
+            us_guess = np.asarray(us_guess, dtype=float)
+            assert us_guess.shape == (self._N, self._n_u)
+        self._us_guess = us_guess
+
+    def reset_guess(self):
+        """ Reset guess to zero.
+        """
+        self._us_guess = np.zeros((self._N, self._n_u))
+
+    def set_stop_tol(self, stop_tol: float=None):
+        """ Set stop tolerance.
+
+        Args:
+            stop_tol (float): Stop threshold.
+        """
+        if stop_tol is not None:
+            self._stop_tol = stop_tol
 
     def set_solver_parameters(
             self, gamma_init: float=None, rho_gamma: float=None,
@@ -65,7 +101,7 @@ class DDPSolver(SolverBase):
     def solve(
             self,
             gamma_fixed: float=None, enable_line_search: bool=True,
-            hold_solution: bool=False,
+            warm_start: bool=False,
             result: bool=False, log: bool=False, plot: bool=False
         ):
         """ Solve OCP via DDP iteration.
@@ -73,8 +109,8 @@ class DDPSolver(SolverBase):
         Args:
             gamma_fixed (float): If set, regularization coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
-            hold_solution (bool=False): If true, solution guess is updated by \
-                optimal solution of this session. Mainly for MPC.
+            warm_start (bool=False): If true, previous solution is used \
+                as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
@@ -84,7 +120,7 @@ class DDPSolver(SolverBase):
             us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): Discretized time history.
             Js (numpy.ndarray): Costs at each iteration.
-            time_elapsed (float): Computational time.
+            time_elapsed (float): Computation time.
             is_success (bool): Success or not.
         """
         if gamma_fixed is None:
@@ -95,16 +131,22 @@ class DDPSolver(SolverBase):
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
             rho_gamma = 1.0
+
         if enable_line_search:
             alphas = self._alphas
         else:
             alphas = np.array([1.0])
 
+        if warm_start is True:
+            us_guess = self._us_opt
+        else:
+            us_guess = self._us_guess
+
         # derivatives functions.
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
 
-        # success flag of solver.
+        # success flag
         is_success = False
 
         time_start = time.perf_counter()
@@ -114,23 +156,29 @@ class DDPSolver(SolverBase):
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
-            self._us_guess,
+            us_guess,
             gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
             self._stop_tol, self._max_iters, self._is_ddp
         )
 
         time_end = time.perf_counter()
-        time_elapsed = time_end - time_start
+        computation_time = time_end - time_start
 
         # number of iterations
-        iters = len(Js) - 1
+        noi = len(Js) - 1
 
-        if hold_solution:
-            self._us_guess = us
+        self._xs_opt = xs
+        self._us_opt = us
+        self._ts = ts
 
-        # results
+        self._result['success'] = is_success
+        self._result['NOI'] = noi
+        self._result['Js'] = Js
+        self._result['computation time'] = computation_time
+
+        # result
         if result:
-            self.print_result(is_success, iters, Js[-1], time_elapsed)
+            self.print_result(is_success, noi, Js[-1], computation_time)
         # log
         if log:
             self.log_data(self._log_dir, xs, us, ts, Js)
@@ -138,7 +186,7 @@ class DDPSolver(SolverBase):
         if plot:
             self.plot_data(self._log_dir, xs, us, ts, Js)
 
-        return xs, us, ts, Js, is_success, time_elapsed
+        return xs, us, ts, is_success
 
     @staticmethod
     @numba.njit(cache=True)
@@ -205,15 +253,15 @@ class DDPSolver(SolverBase):
         Js = Js[0:iters + 1]
         return xs, us, ts, Js, is_success
 
-    def print_result(self, is_success: bool, iters: int, cost: float,
-                     computational_time: float):
+    def print_result(self, is_success: bool, noi: int, cost: float,
+                     computation_time: float):
         """ Print summary of result.
         
         Args:
             is_success (bool): Flag of success or failure.
-            iters (int): Number of iterations.
+            noi (int): Number of iterations.
             cost (float): Final cost value.
-            computational_time (float): Total computational time.
+            computation_time (float): Total computation time.
         """
         print('------------------- RESULT -------------------')
         print(f'solver: {self._solver_name}')
@@ -222,11 +270,11 @@ class DDPSolver(SolverBase):
         else:
             status = 'failure'
         print(f'status: {status}')
-        print(f'iteration: {iters}')
-        print(f'cost value: {cost}')
-        print(f'computational time: {computational_time} [s]')
-        if iters >= 1:
-            print(f'per update : {computational_time / iters} [s]')
+        print(f'number of iterations: {noi}')
+        print(f'cost value: {cost: .8f}')
+        print(f'computation time: {computation_time:.6f} [s]')
+        if noi >= 1:
+            print(f'per update : {computation_time / noi:.6f} [s]')
         print('----------------------------------------------')
 
     @staticmethod
