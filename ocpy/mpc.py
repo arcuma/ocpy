@@ -112,7 +112,7 @@ class MPC:
 
             # In MPC, we use initial value of optimal input trajectory.
             u = us_opt[0]
-            x_next = self.update_state(f, x, u, t, sampling_time)
+            x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
 
             # save
             xs_real.append(x)

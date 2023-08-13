@@ -152,7 +152,7 @@ class DDPSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, ts, Js, is_success = self._solve(
+        xs, us, ts, Js, gammas, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
@@ -175,6 +175,7 @@ class DDPSolver(SolverBase):
         self._result['NOI'] = noi
         self._result['Js'] = Js
         self._result['computation_time'] = computation_time
+        self._result['gammas'] = gammas
 
         # result
         if result:
@@ -206,9 +207,13 @@ class DDPSolver(SolverBase):
         # initial rollout
         xs, J = rollout(f, l, lf, x0, us, t0, dt)
 
-        # cost value history
+        # cost history
         Js = np.zeros(max_iters + 1, dtype=float)
         Js[0] = J
+
+        # gamma history
+        gammas = np.zeros(max_iters + 1, dtype=float)
+        gammas[0] = gamma
 
         is_success = False
 
@@ -229,6 +234,7 @@ class DDPSolver(SolverBase):
             if delta_V > 0:
                 gamma *= rho_gamma
                 Js[iters] = J
+                gammas[iters] = gamma
                 continue
 
             # line search 
@@ -247,11 +253,15 @@ class DDPSolver(SolverBase):
                 gamma *= rho_gamma
     
             gamma = min(max(gamma, gamma_min), gamma_max)
+
             Js[iters] = J
+            gammas[iters] = gamma
 
         ts = np.array([t0 + i*dt for i in range(N + 1)])
         Js = Js[0:iters + 1]
-        return xs, us, ts, Js, is_success
+        gammas = gammas[0: iters + 1]
+
+        return xs, us, ts, Js, gammas, is_success
 
     def print_result(self, is_success: bool, noi: int, cost: float,
                      computation_time: float):
