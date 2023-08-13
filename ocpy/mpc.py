@@ -1,5 +1,3 @@
-### WIP
-
 import sympy as sym
 import numpy as np
 import numba
@@ -29,39 +27,34 @@ class MPC:
         self._f = self._ocp.get_df()[0]
         self._t0 = self._ocp.get_t0()
         self._x0 = self._ocp.get_x0()
-        self._us_guess = self._ocp.get_us_guess()
-        self._xs_guess = self._ocp.get_xs_guess()
         self._initialized = False
     
+    def set_log_directory(self, log_dir: str):
+        """ Set directory path where data are logged.
+
+        Args:
+            log_dir (str): Log directory.
+        """
+        assert isinstance(log_dir, str)
+        self._log_dir = log_dir
+
     def get_log_directory(self):
+        """ Get directory path where data are logged.
+
+        Returns:
+            log_dir (str): Log directory.
+        """
         return self._log_dir
 
-    def init_mpc(
-            self, t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
-            xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
-        ):
+    def init_mpc(self):
         """ Solve ocp once for getting solution guess.
 
         Args:
-            t0 (float): Initial time.
-            x0 (numpy.array): Initial state. Size must be n_x.
-            T (float): Horizon length.
-            N (int): Discretization grid number.
-            xs_guess (numpy.array): Guess of state trajectory. \
-                Size must be (N+1)*n_x. Only used in multiple-shooting.
-            us_guess (numpy.array): Guess of input trajectory. \
-                Size must be N*n_u.
-        
+
         Note:
-            Do not change initial condition after this.
+            Do not change initial condition after this method is called.
         """
-        xs, us, *_ = self._solver.solve(t0, x0, T, N, xs_guess, us_guess)
-        self._t0 = t0
-        self._x0 = x0
-        self._T = T
-        self._N = N
-        self._xs_guess = xs
-        self._us_guess = us
+        self._solver.solve()
 
     def run(self, T_sim: float=20, sampling_time: float=0.005,
             max_iters_mpc: int=5, result=True, log=True, plot=True):
@@ -72,50 +65,72 @@ class MPC:
             sampling_time (float): Sampling time. OCP must be solved within \
                 sampling time.
             mpc_max_iters (int): Maximum iteration number of OCP at each samping.
+            result (bool): If true, summary of result is printed.
+            log (bool): If true, results are logged to log_dir.
+            plot (bool): If true, graphs are generated and saved.
         
         Returns:
-            xs_real (numpy.ndarray): optimal state trajectory. (N * n_x)
-            us_real (numpy.ndarray): optimal control trajectory. (N * n_u)
-            ts_real (numpy.ndarray): time history.
+            xs_real (numpy.ndarray): State History.
+            us_real (numpy.ndarray): Control History.
+            ts_real (numpy.ndarray): Time history.
         """
-        t = self._t0
-        x = self._x0.copy()
-        T = self._T
-        N = self._N
-        xs_guess = self._xs_guess.copy()
-        us_guess = self._us_guess.copy()
-        f = self._f
         assert T_sim > 0
         assert sampling_time > 0
+
+        t = self._t0
+        x = self._x0.copy()
+        f = self._f
+        solver = self._solver
+
+
         self._solver.set_max_iters(max_iters_mpc)
+
         ts_real = np.arange(t, t + T_sim + sampling_time*1e-6, sampling_time)
+
         # record real trajectory of state and control.
         xs_real = []
         us_real = []
-        total_ctime = 0.0
+
+        total_time = 0.0
+        total_noi = 0
+
         # MPC
         for t in ts_real:
-            xs_opt, us_opt, *_, ctime = self._solver.solve(
-                t, x, T, N, xs_guess, us_guess
-            )
-            # In MPC, it uses initial value of optimal input trajectory.
+            solver.set_initial_condition(t, x)
+            solver.solve(warm_start=True, gamma_fixed=0.0)
+
+            us_opt = solver.get_us_opt()
+            result = solver.get_result()
+            computation_time = result['computation_time']
+            noi = result['NOI']
+            total_time += computation_time
+            total_noi += noi
+
+            # print(t)
+            # print(noi)
+            # print()
+
+            # In MPC, we use initial value of optimal input trajectory.
             u = us_opt[0]
             x_next = self.update_state(f, x, u, t, sampling_time)
+
             # save
             xs_real.append(x)
             us_real.append(u)
-            total_ctime += ctime
+
             # for the next sampling time
             x = x_next
-            xs_guess = xs_opt
-            us_guess = us_opt
+
         # convert into numpy
         xs_real = np.array(xs_real, dtype=float)
         us_real = np.array(us_real, dtype=float)
+
         # average computation time
-        ave_ctime = total_ctime / len(ts_real)
+        ave_time = total_time / len(ts_real)
+        ave_noi = total_noi / len(ts_real)
+        
         if result:
-           self.print_result(self._solver._solver_name, x, ave_ctime) 
+           self.print_result(x, ave_time, ave_noi) 
         if log:
             self.log_data(self._log_dir, xs_real, us_real, ts_real)
         if plot:
@@ -149,18 +164,20 @@ class MPC:
             x_next = x + f(x, u, t + q*precision) * r
         return x_next
     
-    @staticmethod
-    def print_result(solver_name: str, x: np.ndarray, ave_ctime: float):
+    def print_result(self, x_final: np.ndarray, ave_time: float,
+                     ave_noi: float):
         """ Print result.
         
         Args:
-            is_success (bool): Flag of success or failure.
-            iters (int): Number of iterations.
-            computation_time (float): total computation time.
+            x_final (np.ndarray): Final state
+            ave_time (float): average computation time.
+            ave_noi (float): average number of iteration.
         """
         print('------------------- RESULT -------------------')
-        print(f'Final state: {x}')
-        print(f'Average computation time: {ave_ctime} [s]')
+        print(f'solver: {self._solver._solver_name}')
+        print(f'Final state: {x_final}')
+        print(f'Average computation time: {ave_time:.6f} [s]')
+        print(f'Average number of iterations: {ave_noi:.6f}')
         print('----------------------------------------------')
 
     @staticmethod

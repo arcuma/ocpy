@@ -41,6 +41,7 @@ hexacopter.ipynb
 - MPC
 ``` txt
 cartpole_mpc.ipynb
+gexacopter_mpc.ipynb
 ```
 
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46

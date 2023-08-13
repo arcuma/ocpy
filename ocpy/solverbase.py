@@ -212,6 +212,7 @@ class SolverBase(abc.ABC):
     def solve(
             self,
             gamma_fixed: float=None, enable_line_search: bool=True,
+            warm_start: bool=False,
             result: bool=False, log: bool=False, plot: bool=False
         ):
         """ Solve ocp.

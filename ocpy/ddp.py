@@ -34,7 +34,7 @@ class DDPSolver(SolverBase):
         self._result['success'] = None
         self._result['NOI'] = None
         self._result['Js'] = None
-        self._result['computation time'] = None
+        self._result['computation_time'] = None
 
         if init:
             self.init_solver()
@@ -174,7 +174,7 @@ class DDPSolver(SolverBase):
         self._result['success'] = is_success
         self._result['NOI'] = noi
         self._result['Js'] = Js
-        self._result['computation time'] = computation_time
+        self._result['computation_time'] = computation_time
 
         # result
         if result:
@@ -189,7 +189,7 @@ class DDPSolver(SolverBase):
         return xs, us, ts, is_success
 
     @staticmethod
-    @numba.njit(cache=True)
+    @numba.njit
     def _solve(
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
@@ -308,7 +308,7 @@ class DDPSolver(SolverBase):
         plotter.plot(save=True)
 
 #### DDP FUNCTIONS ####
-@numba.njit(cache=True)
+@numba.njit
 def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
     """ Rollout state trajectory from initial state and input trajectory,\
         with cost is calculated.
@@ -332,7 +332,7 @@ def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
     J += lf(xs[N], t0 + i*N)
     return xs, J
 
-@numba.njit(cache=True)
+@numba.njit
 def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
     """ Tensor dot product between 1d vector and 3d tensor, contraction\
         with each 0 and 1 axis. This is used for product between Vx \
@@ -353,7 +353,7 @@ def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
                 Vxfab[i][k] += Vx[j] * fab[i][j][k]
     return Vxfab
 
-@numba.njit(cache=True)
+@numba.njit
 def backward_pass(fx, fu, fxx, fux, fuu, 
                     lx, lu, lxx, lux, luu, lfx, lfxx,
                     xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
@@ -452,7 +452,7 @@ def backward_pass(fx, fu, fxx, fux, fuu,
 
     return ks, Ks, delta_V
 
-@numba.njit(cache=True)
+@numba.njit
 def forward_pass(f, l, lf, 
                     xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
                     ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
