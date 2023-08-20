@@ -122,23 +122,6 @@ def vector_dot_tensor_sym(v, T):
     return M.T
 
 
-@njit
-def vector_dot_tensor(v: np.ndarray, T: np.ndarray):
-    """ Tensor contraction between 1d and 3d.
-
-    Args:
-        v (np.ndarray): vector.
-        T (np.ndarray): 3rd order tensor.
-    """
-    l, m, n = T.shape
-    M = np.zeros((l, n))
-    for i in range(l):
-        for j in range(m):
-            for k in range(n):
-                M[i][k] += v[j] * T[i][j][k]
-    return M
-
-
 def simplify(f: sym.Symbol | list[sym.Symbol]):
     """ Simplify symbolic expression.
 

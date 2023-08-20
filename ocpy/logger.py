@@ -4,7 +4,7 @@ from os.path import abspath, dirname, join
 
 
 class Logger:
-    """ Class of saving simulation data .
+    """ Save simulation data.
     """
 
     def __init__(self, log_dir: str=None):
@@ -20,15 +20,15 @@ class Logger:
         self._log_dir = log_dir
 
     def save(self, xs: np.ndarray, us: np.ndarray, ts: np.ndarray, 
-             Js: np.ndarray=None, kkts: np.ndarray=None):
+             cost_hist: np.ndarray=None, kkt_error_hist: np.ndarray=None):
         """ Save simulation data at log_dir.
 
         Args:
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
             ts (np.ndarray): Time at each stage.
-            Js (numpy.ndarray=None): costs of each iteration.
-            kkts (numpy.ndarray=None): KKT error of each iteration .
+            cost_hist (numpy.ndarray=None): costs of each iteration.
+            kkt_error_hist (numpy.ndarray=None): KKT error of each iteration .
 
         Returns:
             log_dir (str): Target directory
@@ -42,12 +42,12 @@ class Logger:
             np.savetxt(u_log, us)
         with open(join(log_dir, 't_log.txt'), mode='w') as t_log:
             np.savetxt(t_log, ts)
-        if Js is not None:
-            with open(join(log_dir, 'J_log.txt'), mode='w') as dat_log:
-                np.savetxt(dat_log, Js)
-        if kkts is not None:
-            with open(join(log_dir, 'kkt_log.txt'), mode='w') as dat_log:
-                np.savetxt(dat_log, kkts)
+        if cost_hist is not None:
+            with open(join(log_dir, 'cost_log.txt'), mode='w') as cost_log:
+                np.savetxt(cost_log, cost_hist)
+        if kkt_error_hist is not None:
+            with open(join(log_dir, 'kkt_log.txt'), mode='w') as cost_log:
+                np.savetxt(cost_log, kkt_error_hist)
         print("Data are saved at " + log_dir)
         return log_dir
         
