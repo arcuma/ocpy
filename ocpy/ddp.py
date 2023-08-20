@@ -31,12 +31,12 @@ class DDPSolver(SolverBase):
 
         self._us_guess = np.zeros((self._N, self._n_u))
 
-        self._result['is_success'] = None
-        self._result['noi'] = None
-        self._result['computation_time'] = None
         self._result['cost_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
+        self._result['xs_opt'] = np.ndarray(0)
+        self._result['us_opt'] = np.ndarray(0)
+        self._result['ts'] = np.ndarray(0)
 
         if init:
             self.init_solver()
@@ -178,6 +178,9 @@ class DDPSolver(SolverBase):
         self._result['cost_hist'] = cost_hist
         self._result['gamma_hist'] = gamma_hist
         self._result['alpha_hist'] = alpha_hist
+        self._result['xs_opt'] = xs
+        self._result['us_opt'] = us
+        self._result['ts'] = ts
 
         # result
         if result:

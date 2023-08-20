@@ -22,35 +22,49 @@ class SolverBase(abc.ABC):
         self._log_dir = join(dirname(dirname(abspath(__file__))), 'log',
                              self._sim_name)
         self._solver_name = ''
+
         # dimensions of state and input.
         self._n_x = ocp.get_n_x()
         self._n_u = ocp.get_n_u()
+
         # Horizon length, num of discretization, time step.
         self._T = ocp.get_T()
         self._N = ocp.get_N()
         self._dt = self._T / self._N
+
         # initial time and state
         self._t0 = ocp.get_t0()
         self._x0 = ocp.get_x0()
+
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
+
         # regularization value.
         self._gamma_init = 1e-3
         self._rho_gamma = 5.0
         self._gamma_min = 1e-8
         self._gamma_max = 1e+6
+
         # solver parameters
         self._max_iters = 1000
+
         # flag
         self._is_single_shooting = True
         self._initialized = False
+
         # optimal trajectory
         self._xs_opt = np.ndarray(0)
         self._us_opt = np.ndarray(0)
+
         # time grids
         self._ts = np.ndarray(0)
-        # result (computation time, cost history, ...)
+
+        # result (success flag, NoI, ...)
         self._result = {}
+        self._result['is_success'] = None
+        self._result['noi'] = None
+        self._result['computation_time'] = None
+
         # derivatives of functions
         self._df = ocp.get_df()
         self._dl = ocp.get_dl()
