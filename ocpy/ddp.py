@@ -48,7 +48,7 @@ class DDPSolver(SolverBase):
         if us_guess is not None:
             us_guess = np.asarray(us_guess, dtype=float)
             assert us_guess.shape == (self._N, self._n_u)
-        self._us_guess = us_guess
+            self._us_guess = us_guess
 
     def reset_guess(self):
         """ Reset guess to zero.
@@ -119,8 +119,6 @@ class DDPSolver(SolverBase):
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
             ts (numpy.ndarray): Discretized time history.
-            Js (numpy.ndarray): Costs at each iteration.
-            time_elapsed (float): Computation time.
             is_success (bool): Success or not.
         """
         if gamma_fixed is None:
@@ -362,9 +360,9 @@ def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
 
 @numba.njit
 def backward_pass(fx, fu, fxx, fux, fuu, 
-                    lx, lu, lxx, lux, luu, lfx, lfxx,
-                    xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                    gamma: float=0.0, is_ddp: bool=True):
+                  lx, lu, lxx, lux, luu, lfx, lfxx,
+                  xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
+                  gamma: float=0.0, is_ddp: bool=True):
     """ Backward pass of DDP.
 
     Args:
