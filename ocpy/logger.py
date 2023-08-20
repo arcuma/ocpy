@@ -26,7 +26,7 @@ class Logger:
         Args:
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
-            ts (np.ndarray): Time history.
+            ts (np.ndarray): Time at each stage.
             Js (numpy.ndarray=None): costs of each iteration.
             kkts (numpy.ndarray=None): KKT error of each iteration .
 

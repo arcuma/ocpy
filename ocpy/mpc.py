@@ -72,7 +72,7 @@ class MPC:
         Returns:
             xs_real (numpy.ndarray): State History.
             us_real (numpy.ndarray): Control History.
-            ts_real (numpy.ndarray): Time history.
+            ts_real (numpy.ndarray): Time at each stage.
         """
         assert T_sim > 0
         assert sampling_time > 0
@@ -102,13 +102,9 @@ class MPC:
             us_opt = solver.get_us_opt()
             result = solver.get_result()
             computation_time = result['computation_time']
-            noi = result['NOI']
+            noi = result['noi']
             total_time += computation_time
             total_noi += noi
-
-            # print(t)
-            # print(noi)
-            # print()
 
             # In MPC, we use initial value of optimal input trajectory.
             u = us_opt[0]
@@ -164,8 +160,7 @@ class MPC:
             x_next = x + f(x, u, t + q*precision) * r
         return x_next
     
-    def print_result(self, x_final: np.ndarray, ave_time: float,
-                     ave_noi: float):
+    def print_result(self, x_final: np.ndarray,ave_noi: float, ave_time: float):
         """ Print result.
         
         Args:
@@ -176,8 +171,8 @@ class MPC:
         print('------------------- RESULT -------------------')
         print(f'solver: {self._solver._solver_name}')
         print(f'Final state: {x_final}')
-        print(f'Average computation time: {ave_time:.6f} [s]')
         print(f'Average number of iterations: {ave_noi:.6f}')
+        print(f'Average computation time: {ave_time:.6f} [s]')
         print('----------------------------------------------')
 
     @staticmethod
@@ -188,8 +183,7 @@ class MPC:
             log_dir (str): Directory where data are saved.
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
-            Js (numpy.ndarray): costs at each iteration.
+            ts (numpy.ndarray): Time at each stage.
         """
         logger = Logger(log_dir)
         logger.save(xs, us, ts)
@@ -202,8 +196,7 @@ class MPC:
             log_dir (str): Directory where data are saved.
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
-            Js (numpy.ndarray): costs at each iteration.
+            ts (numpy.ndarray): Time at each stage.
         """
         plotter = Plotter(log_dir, xs, us, ts)
         plotter.plot(save=True)

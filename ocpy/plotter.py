@@ -20,7 +20,7 @@ class Plotter:
             log_dir (str): Direcory in which graph will be saved.
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
-            ts (np.ndarray): Discrete time history.
+            ts (np.ndarray): Discrete Time at each stage.
             Js (numpy.ndarray): costs of each iteration.
             kkts (numpy.ndarray): KKT error of each iteration .
         """

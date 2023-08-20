@@ -31,10 +31,12 @@ class DDPSolver(SolverBase):
 
         self._us_guess = np.zeros((self._N, self._n_u))
 
-        self._result['success'] = None
-        self._result['NOI'] = None
-        self._result['Js'] = None
+        self._result['is_success'] = None
+        self._result['noi'] = None
         self._result['computation_time'] = None
+        self._result['cost_hist'] = None
+        self._result['gamma_hist'] = None
+        self._result['alpha_hist'] = None
 
         if init:
             self.init_solver()
@@ -78,7 +80,7 @@ class DDPSolver(SolverBase):
             gamma_max (float): Maximum value of regularization.
             alphas (np.ndarray): Line search steps.
             stop_tol (float): Stop threshold.
-            max_iters (int): Number of maximum iterations.
+            max_iters (int): Maximum numbar of iterations.
         """
         self.set_regularization_coeff(gamma_init, rho_gamma, gamma_min, gamma_max)
         self.set_alphas(alphas)
@@ -90,18 +92,15 @@ class DDPSolver(SolverBase):
         """
         print("Initializing solver...")
 
-        tmp = self._max_iters
-        self._max_iters = 10
         # compile
-        self.solve(gamma_fixed=1e3)
-        self._max_iters = tmp
+        self.solve(gamma_fixed=1e3, max_iters=3)
 
         print("Initialization done.")
 
     def solve(
             self,
             gamma_fixed: float=None, enable_line_search: bool=True,
-            warm_start: bool=False,
+            max_iters: int=None, warm_start: bool=False,
             result: bool=False, log: bool=False, plot: bool=False
         ):
         """ Solve OCP via DDP iteration.
@@ -109,16 +108,17 @@ class DDPSolver(SolverBase):
         Args:
             gamma_fixed (float): If set, regularization coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
+            max_iters (int): Maximum numbar of iterations.
             warm_start (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
-            plot (bool): If true, graphs are generated and saved.
+            plot (bool): If true, graphs are generated (and saved if log==True).
         
         Returns:
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): Discretized time history.
+            ts (numpy.ndarray): Discretized Time at each stage.
             is_success (bool): Success or not.
         """
         if gamma_fixed is None:
@@ -135,6 +135,9 @@ class DDPSolver(SolverBase):
         else:
             alphas = np.array([1.0])
 
+        if max_iters is None:
+            max_iters = self._max_iters
+
         if warm_start is True:
             us_guess = self._us_opt
         else:
@@ -150,40 +153,41 @@ class DDPSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, ts, Js, gammas, is_success = self._solve(
+        xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
             us_guess,
             gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
-            self._stop_tol, self._max_iters, self._is_ddp
+            self._stop_tol, max_iters, self._is_ddp
         )
 
         time_end = time.perf_counter()
         computation_time = time_end - time_start
 
         # number of iterations
-        noi = len(Js) - 1
+        noi = len(cost_hist) - 1
 
         self._xs_opt = xs
         self._us_opt = us
         self._ts = ts
 
-        self._result['success'] = is_success
-        self._result['NOI'] = noi
-        self._result['Js'] = Js
+        self._result['is_success'] = is_success
+        self._result['noi'] = noi
         self._result['computation_time'] = computation_time
-        self._result['gammas'] = gammas
+        self._result['cost_hist'] = cost_hist
+        self._result['gamma_hist'] = gamma_hist
+        self._result['alpha_hist'] = alpha_hist
 
         # result
         if result:
-            self.print_result(is_success, noi, Js[-1], computation_time)
+            self.print_result()
         # log
         if log:
-            self.log_data(self._log_dir, xs, us, ts, Js)
+            self.log_data()
         # plot
         if plot:
-            self.plot_data(self._log_dir, xs, us, ts, Js)
+            self.plot_data(save=log)
 
         return xs, us, ts, is_success
 
@@ -203,15 +207,19 @@ class DDPSolver(SolverBase):
         gamma = gamma_init
 
         # initial rollout
-        xs, J = rollout(f, l, lf, x0, us, t0, dt)
+        xs, cost = rollout(f, l, lf, x0, us, t0, dt)
 
         # cost history
-        Js = np.zeros(max_iters + 1, dtype=float)
-        Js[0] = J
+        cost_hist = np.zeros(max_iters + 1, dtype=float)
+        cost_hist[0] = cost
 
         # gamma history
-        gammas = np.zeros(max_iters + 1, dtype=float)
-        gammas[0] = gamma
+        gamma_hist = np.zeros(max_iters + 1, dtype=float)
+        gamma_hist[0] = gamma
+
+        # alpha history
+        alpha_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_hist[0] = 0.0
 
         is_success = False
 
@@ -229,13 +237,13 @@ class DDPSolver(SolverBase):
                 iters -= 1
                 break
 
-            # line search 
+            # line search
             for alpha in alphas:
                 # forward pass
-                xs_new, us_new, J_new = forward_pass(
+                xs_new, us_new, cost_new = forward_pass(
                     f, l, lf, xs, us, t0, dt, ks, Ks, alpha
                 )
-                if J_new < J:
+                if cost_new < cost:
                     gamma /= rho_gamma
                     break
             else:
@@ -244,73 +252,59 @@ class DDPSolver(SolverBase):
             # update trajectory
             xs = xs_new
             us = us_new
-            J = J_new
+            cost = cost_new
     
             # clip gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
 
-            Js[iters] = J
-            gammas[iters] = gamma
+            cost_hist[iters] = cost
+            gamma_hist[iters] = gamma
+            alpha_hist[iters] = alpha
 
         ts = np.array([t0 + i*dt for i in range(N + 1)])
-        Js = Js[0:iters + 1]
-        gammas = gammas[0: iters + 1]
+        cost_hist = cost_hist[0:iters + 1]
+        gamma_hist = gamma_hist[0:iters + 1]
+        alpha_hist = alpha_hist[0:iters + 1]
 
-        return xs, us, ts, Js, gammas, is_success
+        return xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist
 
-    def print_result(self, is_success: bool, noi: int, cost: float,
-                     computation_time: float):
+    def print_result(self):
         """ Print summary of result.
-        
-        Args:
-            is_success (bool): Flag of success or failure.
-            noi (int): Number of iterations.
-            cost (float): Final cost value.
-            computation_time (float): Total computation time.
         """
-        print('------------------- RESULT -------------------')
-        print(f'solver: {self._solver_name}')
+        is_success = self._result['is_success']
         if is_success:
             status = 'success'
         else:
             status = 'failure'
+        noi = self._result['noi']
+        computation_time = self._result['computation_time']
+        cost = self._result['cost_hist'][-1]
+
+        print('------------------- RESULT -------------------')
+        print(f'solver: {self._solver_name}')
         print(f'status: {status}')
         print(f'number of iterations: {noi}')
-        print(f'cost value: {cost: .8f}')
         print(f'computation time: {computation_time:.6f} [s]')
         if noi >= 1:
             print(f'per update : {computation_time / noi:.6f} [s]')
+        print(f'final cost value: {cost: .8f}')
         print('----------------------------------------------')
-
-    @staticmethod
-    def log_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
-                 Js: np.ndarray):
-        """ Log data.
-        
-        Args:
-            log_dir (str): Directory where data are saved.
-            xs (numpy.ndarray): Optimal state trajectory. (N + 1) * n_x
-            us (numpy.ndarray): Optimal control trajectory. N * n_u
-            ts (numpy.ndarray): Time history.
-            Js (numpy.ndarray): Costs at each iteration.
+    
+    def log_data(self):
+        """ Log data to self._log_dir.
         """
-        logger = Logger(log_dir)
-        logger.save(xs, us, ts, Js)
 
-    @staticmethod
-    def plot_data(log_dir: str, xs: np.ndarray, us: np.ndarray, ts: np.ndarray,
-                  Js: np.ndarray):
-        """ Plot data and save it.
-        
-        Args:
-            log_dir (str): Directory where data are saved.
-            xs (numpy.ndarray): Optimal state trajectory. (N + 1) * n_x
-            us (numpy.ndarray): Optimal control trajectory. N * n_u
-            ts (numpy.ndarray): Time history.
-            Js (numpy.ndarray): Costs at each iteration.
+        logger = Logger(self._log_dir)
+        logger.save(self._xs_opt, self._us_opt, self._ts,
+                    self._result['cost_hist'])
+
+    def plot_data(self, save=True):
+        """ Plot data.
         """
-        plotter = Plotter(log_dir, xs, us, ts, Js)
-        plotter.plot(save=True)
+        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
+                          self._result['cost_hist'])
+        plotter.plot(save=save)
+        
 
 #### DDP FUNCTIONS ####
 @numba.njit
@@ -330,12 +324,12 @@ def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
     N = us.shape[0]
     xs = np.zeros((N + 1, x0.shape[0]))
     xs[0] = x0
-    J = 0.0
+    cost = 0.0
     for i in range(N):
         xs[i + 1] = xs[i] + f(xs[i], us[i], t0 + i*dt) * dt
-        J += l(xs[i], us[i], t0 + i*dt) * dt
-    J += lf(xs[N], t0 + i*N)
-    return xs, J
+        cost += l(xs[i], us[i], t0 + i*dt) * dt
+    cost += lf(xs[N], t0 + i*N)
+    return xs, cost
 
 @numba.njit
 def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
@@ -480,7 +474,7 @@ def forward_pass(f, l, lf,
     Returns:
         xs_new (numpy.ndarray): New state trajectory.
         us_new (numpy.ndarray): New control trajectory.
-        J_new (float): Cost along with (xs_new, us_new).
+        cost_new (float): Cost along with (xs_new, us_new).
     """
     N = us.shape[0]
     T = N * dt
@@ -489,17 +483,17 @@ def forward_pass(f, l, lf,
     xs_new = np.empty(xs.shape)
     xs_new[0] = xs[0]
     us_new = np.empty(us.shape)
-    J_new = 0.0
+    cost_new = 0.0
 
     for i in range(N):
         t = t0 + i*dt
         us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
         xs_new[i + 1] = xs_new[i] + f(xs_new[i], us_new[i], t) * dt
-        J_new += l(xs_new[i], us_new[i], t) * dt
+        cost_new += l(xs_new[i], us_new[i], t) * dt
     # terminal cost
-    J_new += lf(xs_new[N], t0 + T)
+    cost_new += lf(xs_new[N], t0 + T)
 
-    return xs_new, us_new, J_new
+    return xs_new, us_new, cost_new
 ### END DDP FUNCTIONS ###
 
 

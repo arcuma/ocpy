@@ -41,7 +41,7 @@ class DDPSolver(SolverBase):
             gamma_max (float): Maximum value of damp.
             alphas (np.ndarray): Line search steps.
             stop_tol (float): Stop threshold.
-            max_iters (int): Number of maximum iterations.
+            max_iters (int): Maximum numbar of iterations.
         """
         self.set_regularization_coeff(gamma_init, rho_gamma, gamma_min, gamma_max)
         self.set_alphas(alphas)
@@ -91,7 +91,7 @@ class DDPSolver(SolverBase):
         Returns:
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): Discretized time history.
+            ts (numpy.ndarray): Discretized Time at each stage.
             Js (numpy.ndarray): Costs at each iteration.
             time_elapsed (float): computation time.
             is_success (bool): Success or not.
@@ -406,7 +406,7 @@ class DDPSolver(SolverBase):
             log_dir (str): Directory where data are saved.
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
+            ts (numpy.ndarray): Time at each stage.
             Js (numpy.ndarray): costs at each iteration.
         """
         logger = Logger(log_dir)
@@ -421,7 +421,7 @@ class DDPSolver(SolverBase):
             log_dir (str): Directory where data are saved.
             xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
             us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): time history.
+            ts (numpy.ndarray): Time at each stage.
             Js (numpy.ndarray): costs at each iteration.
         """
         plotter = Plotter(log_dir, xs, us, ts, Js)
@@ -479,7 +479,7 @@ class iLQRSolver(DDPSolver):
         Returns:
             xs (numpy.ndarray): Optimal state trajectory. (N * n_x)
             us (numpy.ndarray): Optimal control trajectory. (N * n_u)
-            ts (numpy.ndarray): Discretized time history.
+            ts (numpy.ndarray): Discretized Time at each stage.
             Js (numpy.ndarray): Costs at each iteration.
             time_elapsed (float): computation time.
             is_success (bool): Success or not.
