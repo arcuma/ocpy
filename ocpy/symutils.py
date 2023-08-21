@@ -1,10 +1,9 @@
 """
-utility module that helps symbolic matrix calculation.
+Utility module that helps SymPy operation.
 """
 
 import sympy as sym
 import numpy as np
-from sympy import ImmutableDenseNDimArray as Tensor
 from numba import njit
 import copy
 
@@ -96,7 +95,10 @@ def diag(v: sym.Matrix):
     """ Transform vector into diagonal matrix.
 
     Args:
-        v(sym.Matrix): Symbolic vector.
+        v (sym.Matrix): Symbolic vector.
+
+    Returns:
+        D (sym.Matrix): Symbolic diagonal matrix.
     """
     return sym.diag(*v)
 
@@ -128,7 +130,7 @@ def simplify(f: sym.Symbol | list[sym.Symbol]):
     Args:
         f (sym of list[sympy]): Symbolic function(s).
     """
-    if isinstance(f, list):
+    if isinstance(f, (list, tuple)):
         for func in f:
             func.simplify()
     else:
