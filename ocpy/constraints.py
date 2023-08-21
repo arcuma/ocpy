@@ -21,6 +21,7 @@ class SymIneqConstraints:
         gxx = symutils.diff_matrix(gx, x)
         gux = symutils.diff_matrix(gu, x)
         guu = symutils.diff_matrix(gu, u)
+
         self.g   = g
         self.gx  = gx
         self.gu  = gu
@@ -120,11 +121,13 @@ class NumIneqConstraints:
         """
         args = [x, u, t]
         dg_sym = [g_sym, gx_sym, gu_sym, gxx_sym, gux_sym, guu_sym]
+
         dg = []
         for i, func_sym in enumerate(dg_sym):
             args = [x, u, t]
             dim_reduction = True if i == 0 else False
             dg.append(symutils.lambdify(args, func_sym, dim_reduction))
+
         self.dg_sym = dg_sym
         self.g   = dg[0]
         self.gx  = dg[1]
@@ -156,6 +159,7 @@ class SymEqConstraints:
         hxx = symutils.diff_matrix(hx, x)
         hux = symutils.diff_matrix(hu, x)
         huu = symutils.diff_matrix(hu, u)
+
         self.h   = h
         self.hx  = hx
         self.hu  = hu
@@ -255,11 +259,13 @@ class NumEqConstraints:
         """
         args = [x, u, t]
         dh_sym = [h_sym, hx_sym, hu_sym, hxx_sym, hux_sym, huu_sym]
+
         dh = []
         for i, func_sym in enumerate(dh_sym):
             args = [x, u, t]
             dim_reduction = True if i == 0 else False
             dh.append(symutils.lambdify(args, func_sym, dim_reduction))
+
         self.dh_sym = dh_sym
         self.h   = dh[0]
         self.hx  = dh[1]

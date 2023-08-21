@@ -1,10 +1,9 @@
 """
-utility module that helps symbolic matrix calculation.
+Utility module that helps SymPy operation.
 """
 
 import sympy as sym
 import numpy as np
-from sympy import ImmutableDenseNDimArray as Tensor
 from numba import njit
 import copy
 
@@ -96,7 +95,10 @@ def diag(v: sym.Matrix):
     """ Transform vector into diagonal matrix.
 
     Args:
-        v(sym.Matrix): Symbolic vector.
+        v (sym.Matrix): Symbolic vector.
+
+    Returns:
+        D (sym.Matrix): Symbolic diagonal matrix.
     """
     return sym.diag(*v)
 
@@ -122,30 +124,13 @@ def vector_dot_tensor_sym(v, T):
     return M.T
 
 
-@njit
-def vector_dot_tensor(v: np.ndarray, T: np.ndarray):
-    """ Tensor contraction between 1d and 3d.
-
-    Args:
-        v (np.ndarray): vector.
-        T (np.ndarray): 3rd order tensor.
-    """
-    l, m, n = T.shape
-    M = np.zeros((l, n))
-    for i in range(l):
-        for j in range(m):
-            for k in range(n):
-                M[i][k] += v[j] * T[i][j][k]
-    return M
-
-
 def simplify(f: sym.Symbol | list[sym.Symbol]):
     """ Simplify symbolic expression.
 
     Args:
         f (sym of list[sympy]): Symbolic function(s).
     """
-    if isinstance(f, list):
+    if isinstance(f, (list, tuple)):
         for func in f:
             func.simplify()
     else:

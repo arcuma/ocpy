@@ -2,13 +2,10 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 ocpy/riccati_recursion.py
-rl_cartpole.ipynb
 log/
 log_mpc/
 test/
 sympy_test/
-cartpole_test.ipynb
-hexacopter_test.ipynb
 test.ipynb
 memo.md
 tempCodeRunnerFile.py
