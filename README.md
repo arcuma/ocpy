@@ -34,16 +34,19 @@ You can also perform model predictive control (MPC) using these optimal control 
 ## Examples
 - OCP
 ```txt
-lqr.ipynb
-cartpole.ipynb
-hexacopter.ipynb
+lqr_ddp.ipynb
+cartpole_ddp.ipynb
+hexacopter_ddp.ipynb
 ```
 - MPC
 ``` txt
-cartpole_mpc.ipynb
+cartpole_mpc_ddp.ipynb
+gexacopter_mpc_ddp.ipynb
 ```
 
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
+
+https://github.com/arcuma/ocpy/assets/67198327/8829f420-46f0-4b6c-b0a9-57a556cdf8be
 
 ## References
 1. [D. H. Jacobson and D. Q. Mayne, Differential Dynamic Programming, Elsevier, 1970.](https://doi.org/10.1016/B978-0-12-012710-8.50010-8)

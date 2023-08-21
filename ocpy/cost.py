@@ -25,6 +25,7 @@ class SymCost:
         luu  = symutils.diff_vector(lu, u)
         lfx  = symutils.diff_scalar(lf, x)
         lfxx = symutils.diff_vector(lfx, x)
+
         self.l    = l
         self.lx   = lx
         self.lu   = lu
@@ -127,11 +128,13 @@ class NumCost:
         """
         dl_sym = [l_sym, lx_sym, lu_sym, lxx_sym, lux_sym, luu_sym,
                   lf_sym, lfx_sym, lfxx_sym]
+
         dl = []
         for i, func_sym in enumerate(dl_sym):
             args = [x, u, t] if i < 6 else [x, t]
             dim_reduction = True if i in [1, 2, 7] else False
             dl.append(symutils.lambdify(args, func_sym, dim_reduction))
+
         self.l    = dl[0]
         self.lx   = dl[1]
         self.lu   = dl[2]

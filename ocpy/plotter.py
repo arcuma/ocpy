@@ -13,18 +13,17 @@ class Plotter:
     """
     def __init__(self, log_dir: str, 
                  xs: np.ndarray, us: np.ndarray,  ts: np.ndarray, 
-                 Js: np.ndarray=None, kkts: np.ndarray=None):
+                 cost_hist: np.ndarray=None, kkt_error_hist: np.ndarray=None):
         """ Constructor.
 
         Args:
             log_dir (str): Direcory in which graph will be saved.
             xs (np.ndarray): State trajectory.
             us (np.ndarray): Control input trajectory.
-            ts (np.ndarray): Discrete time history.
-            Js (numpy.ndarray): costs of each iteration.
-            kkts (numpy.ndarray): KKT error of each iteration .
+            ts (np.ndarray): Discrete Time at each stage.
+            cost_hist (numpy.ndarray=None): costs of each iteration.
+            kkt_error_hist (numpy.ndarray=None): KKT error of each iteration .
         """
-        # hold data
         N = ts.size - 1
         self._N_x = xs.shape[0]
         self._N_u = us.shape[0]
@@ -34,16 +33,20 @@ class Plotter:
         if self._N_u not in(self._N_x - 1, self._N_x):
             warnings.warn("Size of input should be equal to (or 1 less than) "\
                           "state.")
-        self._log_dir = log_dir
+
+        self._log_dir = abspath(log_dir)
+
         self._ts = ts
         self._xs = xs if xs.ndim > 1 else xs.reshape((-1, 1))
         self._us = us if us.ndim > 1 else us.reshape((-1, 1))
-        self._Js = Js
-        self._kkts = kkts
+        self._costs = cost_hist
+        self._kkts = kkt_error_hist
+
         self._dtau = ts[1] - ts[0]
         self._n_x = self._xs.shape[1]
         self._n_u = self._us.shape[1]
         self._num_graphs = self._n_x + self._n_u + 1
+
         # set style
         sns.set_style('ticks')
         sns.set_palette('deep')
@@ -70,18 +73,22 @@ class Plotter:
             log_dir (str): Direcory in which logs are stored.
             dat_name (str): Name of dat_vs_iters.
         """
+        log_dir = abspath(log_dir)
         xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
         us = np.genfromtxt(join(log_dir, 'u_log.txt'))
         ts = np.genfromtxt(join(log_dir, 't_log.txt'))
-        if isfile(join(join(log_dir, 'J_log.txt'))):
-            Js = np.genfromtxt(join(log_dir, 'J_log.txt'))
+
+        if isfile(join(join(log_dir, 'cost_log.txt'))):
+            costs = np.genfromtxt(join(log_dir, 'cost_log.txt'))
         else:
-            Js = None
+            costs = None
+
         if isfile(join(join(log_dir, 'kkt_log.txt'))):
             kkts = np.genfromtxt(join(log_dir, 'kkt_log.txt'))
         else:
             kkts = None
-        return Plotter(log_dir, xs, us, ts, Js, kkts)
+
+        return Plotter(log_dir, xs, us, ts, costs, kkts)
 
     
     def plot(
@@ -100,7 +107,6 @@ class Plotter:
             show (bool): If true, display graph.
             save (bool): If true, save graph to log_dir.
         """
-        plt.rcParams['font.size'] = 24
         # variables
         n_x = self._n_x
         n_u = self._n_u
@@ -110,8 +116,9 @@ class Plotter:
         ts = self._ts
         xs = self._xs
         us = self._us
-        Js = self._Js
+        costs = self._costs
         kkts = self._kkts
+
         # number of columns of graph
         cols = math.ceil(math.sqrt(n_x + n_u))
         # number of rows of graph. 
@@ -120,11 +127,13 @@ class Plotter:
         rows = rows_x + rows_u + 1
         # rows * cols 
         fig, axes = plt.subplots(rows, cols)
+
         # figure size
         fig.set_figheight(fig_scale * rows)
         fig.set_figwidth(2.5 * fig_scale * cols)
         # space between graphs
         fig.subplots_adjust(wspace=wspace_scale/cols, hspace=hspace_scale/rows)
+
         # state
         for i in range(rows_x):
             for j in range(cols):
@@ -139,6 +148,7 @@ class Plotter:
                     axes[i][j].set_xlim(ts[0], ts[-1])
                 else:
                     fig.delaxes(axes[i][j])
+
         # control
         for i in range(rows_x, rows_x + rows_u):
             for j in range(cols):
@@ -153,13 +163,14 @@ class Plotter:
                     axes[i][j].set_xlim(ts[0], ts[-1])
                 else:
                     fig.delaxes(axes[i][j])
-        # Js
+
+        # costs and kkts
         for j in range(cols):
             i = rows_x + rows_u
-            if j == 0 and Js is not None:
-                num_iters = Js.size - 1
+            if j == 0 and costs is not None:
+                num_iters = costs.size - 1
                 arr_iters = np.arange(num_iters + 1)
-                axes[i][j].plot(arr_iters, Js)
+                axes[i][j].plot(arr_iters, costs)
                 axes[i][j].tick_params(labelsize=10*font_scale_ticks)
                 axes[i][j].set_xlabel(r'${\rm iteration}$',
                                       fontsize=10*font_scale_label)
@@ -182,10 +193,13 @@ class Plotter:
                 axes[i][j].xaxis.set_major_locator(MaxNLocator(integer=True))
             else:
                 fig.delaxes(axes[i][j])
+
         if save:
+            os.makedirs(self._log_dir, exist_ok=True)
             plt.savefig(join(self._log_dir, 'result.pdf'),
                         bbox_inches='tight', pad_inches=0.1)
             print('Graphs are saved at ' + join(self._log_dir, 'result.pdf'))
+
         if show:
             plt.show()
 

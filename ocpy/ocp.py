@@ -17,30 +17,33 @@ class OCP:
         Args:
             n_x (int): Dimension of state.
             n_u (int): Dimension of input.
-            ocp_name (str):
+            ocp_name (str): Simulation name.
         """
+
         self._n_x = n_x
         self._n_u = n_u
         self._ocp_name = ocp_name
+
         # state and input (symbol)
         self._x = symutils.define_vector('x', n_x)
         self._u = symutils.define_vector('u', n_u)
         self._t = sym.Symbol('t')
         self._dt = sym.Symbol('dt')
+
         # dictionary holding symbols and values of constants
         self._scalar_dict = {}
         self._vector_dict = {}
         self._matrix_dict = {}
+
         # flags
         self._is_lambdified = False
+
         # in define()
         self._T = None
         self._N = None
         self._dt_value = None
         self._t0 = None
         self._x0 = None
-        self._us_guess = None
-        self._xs_guess = None
         self._is_continuous = None
         self._f_original = None
         self._l_original = None
@@ -58,6 +61,7 @@ class OCP:
         self._has_ineq_constraints = False
         self._has_eq_constraints = False
         self._is_ocp_defined = False
+
         # in lambdify()
         self._df_subs = None
         self._dl_subs = None
@@ -65,6 +69,8 @@ class OCP:
         self._dh_subs = None
         self._num_dynamics = None
         self._num_cost = None
+        self._num_ineq_constraints = None
+        self._num_eq_constraints = None
         self._df_num = None
         self._dl_num = None
         self._dg_num = None
@@ -75,7 +81,6 @@ class OCP:
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
             t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
-            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
             is_continuous: bool=True, simplification: bool=False
         ):
         """ Define optimal control problem. 
@@ -92,10 +97,6 @@ class OCP:
             x0 (numpy.array): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
-            xs_guess (numpy.array): Guess of state trajectory. \
-                Size must be (N+1)*n_x. Only used in multiple-shooting.
-            us_guess (numpy.array): Guess of input trajectory. \
-                Size must be N*n_u.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
             simplification (bool=False): If True, functions are simplified.\
@@ -103,6 +104,7 @@ class OCP:
         """
         x, u, t, dt = self._x, self._u, self._t, self._dt
         n_x, n_u = self._n_x, self._n_u
+
         t0 = float(t0) if t0 is not None else 0.0
         if x0 is not None:
             x0 = np.array(x0, dtype=float)
@@ -111,21 +113,13 @@ class OCP:
             x0 = np.zeros(n_x)
         T = float(T) if T is not None else 5.0
         N = int(N) if N is not None else 200
-        if xs_guess is not None:
-            xs_guess = np.array(xs_guess, dtype=float)
-            assert xs_guess.shape == (N + 1, n_x)
-        else:
-            xs_guess = np.tile(x0, (N + 1, 1))
-        if us_guess is not None:
-            us_guess = np.array(us_guess, dtype=float)
-            assert us_guess.shape == (N, n_u)
-        else:
-            us_guess = np.zeros((N, n_u))
+
         # if l and lf are 1x1 Matrix, turn it into Symbol
         if isinstance(l, sym.Matrix):
             l = l[0, 0]
         if isinstance(lf, sym.Matrix):
             lf = lf[0, 0]
+
         # symbolic derivatives of dynamics and cost.
         if is_continuous:
             sym_dynamics = SymDynamics(x, u, t, f)
@@ -138,6 +132,7 @@ class OCP:
         df_sym = sym_dynamics.get_derivatives()
         # l, lx, lu, lxx, lux, luu, lf, lfx, lfxx
         dl_sym = sym_cost.get_derivatives()
+
         # inequality constraints
         if g is not None:
             sym_ineq_constraints = SymIneqConstraints(x, u, t, g)
@@ -148,6 +143,7 @@ class OCP:
             self._dg_sym = dg_sym
             self._n_g = len(g)
             self._has_ineq_constraints = has_ineq_constraints
+
         # equality constraints
         if h is not None:
             sym_eq_constraints = SymEqConstraints(x, u, t, h)
@@ -158,6 +154,7 @@ class OCP:
             self._dh_sym = dh_sym
             self._n_h = len(h)
             self._has_eq_constraints = has_eq_constraints
+
         # simplify
         if simplification:
             symutils.simplify(df_sym)
@@ -166,14 +163,13 @@ class OCP:
                 symutils.simplify(dg_sym)
             if self._has_eq_constraints:
                 symutils.simplify(dh_sym)
+
         # hold
         self._t0 = t0
-        self._x0 = x0        
-        self._T = float(T)
+        self._x0 = x0
+        self._T = T
         self._N = N
         self._dt_value = T / N
-        self._xs_guess = xs_guess
-        self._us_guess = us_guess
         self._is_continuous = is_continuous
         self._sym_dynamics = sym_dynamics
         self._sym_cost = sym_cost
@@ -183,13 +179,13 @@ class OCP:
         self._df_sym = df_sym
         self._dl_sym = dl_sym
         self._is_ocp_defined = True
+        
         # generate lambda function.
         self._lambdify()
 
     def define_unconstrained(self,
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None, 
-            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
             is_continuous: bool=True, simplification: bool=False
         ):
         """ Define optimal control problem. 
@@ -202,17 +198,12 @@ class OCP:
             x0 (numpy.array): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
-            xs_guess (numpy.array): Guess of state trajectory. \
-                Size must be (N+1)*n_x. Only used in multiple-shooting.
-            us_guess (numpy.array, optional): Guess of input trajectory. \
-                Size must be (N * n_u).
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
                 If true, they will be discretized. Default is False.
             simplification (bool=False): If True, functions are simplified.\
                 Simplification may take time. Default is False.
         """
         self.define(f=f, l=l, lf=lf, g=None, h=None,t0=t0 , x0=x0, T=T, N=N,
-                    xs_guess=xs_guess, us_guess=us_guess, 
                     is_continuous=is_continuous, simplification=simplification)
 
     def _lambdify(self) -> tuple[list, list]:
@@ -223,22 +214,26 @@ class OCP:
                 (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx))
         """
         assert self._is_ocp_defined
+
         x = self._x
         u = self._u
         t = self._t
         dt = self._dt
+
         # dynamics
         df_subs = symutils.substitute_constants_list(
             self._df_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_dynamics = NumDynamics(x, u, t, dt, *df_subs)
         df_num = num_dynamics.get_derivatives()
+
         # cost
         dl_subs = symutils.substitute_constants_list(            
             self._dl_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_cost = NumCost(x, u, t, dt, *dl_subs)
         dl_num = num_cost.get_derivatives()
+
         # inequality constraints
         if self._has_ineq_constraints:
             dg_subs = symutils.substitute_constants_list(
@@ -250,8 +245,9 @@ class OCP:
                 )
             dg_num = num_ineq_constraints.get_derivatives()
             self._dg_subs = dg_subs
-            self._num_ineq_constrants = num_ineq_constraints
+            self._num_ineq_constraints = num_ineq_constraints
             self._dg_num = dg_num
+
         # equality constraints
         if self._has_eq_constraints:
             dh_subs = symutils.substitute_constants_list(
@@ -265,6 +261,7 @@ class OCP:
             self._dh_subs = dh_subs
             self._num_eq_constrants = num_eq_constraints
             self._dh_num = dh_num
+
         # hold
         self._df_subs = df_subs
         self._num_dynamics = num_dynamics
@@ -274,8 +271,8 @@ class OCP:
         self._dl_num = dl_num
         self._is_lambdified = True
 
-    def reset_initial_condition(self, t0: float=None, x0: np.ndarray=None):
-        """ Reset t0 and x0.
+    def set_initial_condition(self, t0: float=None, x0: np.ndarray=None):
+        """ Set t0 and x0.
 
         Args:
             t0 (float): Initial time of horizon.
@@ -288,8 +285,8 @@ class OCP:
             assert x0.shape[0] == self._n_x
             self._x0 = np.array(x0, dtype=float)
     
-    def reset_horizon(self, T: float=None, N: float=None):
-        """ Reset T and N.
+    def set_horizon(self, T: float=None, N: float=None):
+        """ Set T and N.
 
         Args:
             T (float): Horizon length.
@@ -303,38 +300,20 @@ class OCP:
             self._N = N
         self._dt_val = self._N / self._T
 
-    def reset_guess(self, xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
-        """ Reset guess of state and input trajectory.
-
-        Args:
-            xs_guess (np.ndarray): Guess of state trajectory.
-            us_guess (np.ndarray): Guess of input trajectory.
-        """
-        if xs_guess is not None:
-            assert xs_guess.shape == (self._N + 1, self._n_x)
-            self._xs_guess = np.asarray(xs_guess, dtype=float)  
-        if us_guess is not None:
-            assert us_guess.shape == (self._N, self._n_u)
-            self._us_guess = np.asarray(us_guess, dtype=float)  
-
-    def reset_parameters(self, t0: float=None, x0: np.ndarray=None,
-                         T: float=None, N: int=None,
-                         xs_guess: np.ndarray=None, us_guess: np.ndarray=None):
-        """ Reset parameters.
+    def set_parameters(self, t0: float=None, x0: np.ndarray=None,
+                       T: float=None, N: int=None):
+        """ Set parameters.
 
         Args:
             t0 (float): Initial time of horizon.
             x0 (float): Initial state of horizon.
             T (float): Horizon length.
             N (int): Discretization grid number.
-            xs_guess (np.ndarray): Guess of state trajectory.
-            us_guess (np.ndarray): Guess of input trajectory.
         """
         assert self._is_ocp_defined
-        self.reset_initial_condition(t0, x0)
-        self.reset_horizon(T, N)
-        self.reset_guess(xs_guess, us_guess)
-    
+        self.set_initial_condition(t0, x0)
+        self.set_horizon(T, N)
+
     def get_initial_condition(self):
         """ Return t0 and x0.
         """
@@ -344,11 +323,6 @@ class OCP:
         """ Return T and N.
         """
         return self._T, self._N
-
-    def get_guess(self):
-        """ Return initial guess of xs and us.
-        """
-        return self._xs_guess, self._us_guess
 
     def get_t0(self) -> float:
         """ Return t0.
@@ -379,18 +353,6 @@ class OCP:
         """
         assert self._is_ocp_defined
         return self._dt_value
-
-    def get_xs_guess(self) -> np.ndarray:
-        """ Return initial guess of xs.
-        """
-        assert self._is_ocp_defined
-        return self._xs_guess
-
-    def get_us_guess(self) -> np.ndarray:
-        """ Return initial guess of us.
-        """
-        assert self._is_ocp_defined
-        return self._us_guess
 
     # symbolic
     def get_df_symbolic(self) -> tuple:
@@ -472,7 +434,7 @@ class OCP:
         assert self._is_lambdified
         return self._dh_subs
 
-    # num
+    # numba-numpy lambda functions
     def get_df(self) -> tuple:
         """ Return derivatives of dynamics.
 
@@ -560,8 +522,8 @@ class OCP:
         return sym.zeros(self._n_x, 1)
     
     @staticmethod
-    def zero_vector(m: int) -> sym.Matrix:
-        """ symbolic m*1-size zero Matrix.
+    def get_zero_vector(m: int) -> sym.Matrix:
+        """ Return symbolic m*1-size zero Matrix.
 
         Args:
             m (int): Dimension of vector.
@@ -569,8 +531,8 @@ class OCP:
         return sym.zeros(m, 1)
 
     @staticmethod   
-    def zero_matrix(m: int, n: int) -> sym.Matrix:
-        """ symbolic m*n-size zero Matrix.
+    def get_zero_matrix(m: int, n: int) -> sym.Matrix:
+        """ Return symbolic m*n-size zero Matrix.
 
         Args:
             m (int): dimension of rows
@@ -669,7 +631,6 @@ class OCP:
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
             g: sym.Matrix, h: sym.Matrix,
             t0: float, x0: np.ndarray, T: float, N: int, 
-            xs_guess: np.ndarray=None, us_guess: np.ndarray=None,
             scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
             is_continuous=True, simplification=False):
         """ Define optimal control problem. If symbolic constatnts are included, \
@@ -689,8 +650,6 @@ class OCP:
             x0 (numpy.array): Initial state. size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grids.
-            us_guess (numpy.array, optional): Guess of input trajectory. \
-                size must be (N * n_u).
             scalar_dict (dict) : {"name": (symbol, value)})
             vector_dict (dict) : {"name": (symbol, value)}) 
             matrix_dict (dict) : {"name": (symbol, value)}) 
@@ -706,7 +665,7 @@ class OCP:
         ocp._scalar_dict = scalar_dict
         ocp._vector_dict = vector_dict
         ocp._matrix_dict = matrix_dict
-        ocp.define(f, l, lf, g, h, t0, x0, T, N, xs_guess, us_guess,
+        ocp.define(f, l, lf, g, h, t0, x0, T, N,
             is_continuous, simplification)
         return ocp
     
@@ -735,7 +694,7 @@ class OCP:
         Q_f = sym.diag(*q_f)
         R = sym.diag(*r)
         # state equation
-        f = cartpole_ocp.zero_vector(n_x)
+        f = cartpole_ocp.get_zero_vector(n_x)
         f[0] = x[2]
         f[1] = x[3]
         f[2] = (u[0] + m_p*sin(x[1])*(l*x[1]*x[1] + g*cos(x[1]))) \
@@ -752,12 +711,10 @@ class OCP:
         # horizon
         T = 5.0
         N = 200
-        # initial state and solution guess
+        # initial condition
         t0 = 0.0
         x0 = np.array([0.0, 0.0, 0.0, 0.0])
-        us_guess = np.zeros((N, n_u))
         cartpole_ocp.define_unconstrained(
             f, l, lf, t0, x0, T, N,
-            us_guess=us_guess, 
             is_continuous=True, simplification=simplification)
         return cartpole_ocp

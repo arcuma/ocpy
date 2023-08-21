@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.patches as patches
+import mpl_toolkits.mplot3d.art3d as art3d
 import seaborn as sns
 import sys
 from os.path import join
@@ -10,16 +11,17 @@ from os.path import join
 class CartPoleAnimator:
     """ Class of generating animation of cartpole.
     """
-    def __init__(self, log_dir: str, sim_name: str='cartpole'):
+    def __init__(self, log_dir: str, file_name: str='cartpole'):
         """ Constructor.
         
         Args:
             log_dir (str): Direcory in which logs are stored.
-            sim_name (str): Simulation name.
+            file_name (str): Animation is saved as (filename).mp4.
+
         """
         # Load data
         self._log_dir = log_dir
-        self._sim_name = sim_name
+        self._file_name = file_name
         self._xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
         self._us = np.genfromtxt(join(log_dir, 'u_log.txt'))
         self._ts = np.genfromtxt(join(log_dir, 't_log.txt'))
@@ -27,7 +29,7 @@ class CartPoleAnimator:
             self._xs = self._xs.reshape((-1, 1))
         if self._us.ndim == 1:
             self._us = self._us.reshape((-1, 1))
-        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN-1)
+        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
         if self._us.shape[0] == self._xs.shape[0] - 1:
             self._us = np.append(self._us, [self._us[-1]], axis=0)
         self._n_x = self._xs.shape[1]
@@ -55,12 +57,12 @@ class CartPoleAnimator:
         self._total_frames = (int)(self._ts.size / self._skip_rate)
 
     
-    def generate_animation(self, save=True, skip_rate: int=1):
+    def generate_animation(self, save: bool=True, skip_rate: int=1):
         """ Genarating animation.
 
         Args:
-            skip_rate (int): Skip rate.
             save (bool): If True, animation is saved to log_dir.
+            skip_rate (int): Skip rate.
         """
         # frame skip
         self._skip_rate = skip_rate
@@ -139,7 +141,7 @@ class CartPoleAnimator:
             )
         # save movie
         if save:
-            anim.save(join(self._log_dir, self._sim_name) + '.mp4', dpi=120,
+            anim.save(join(self._log_dir, self._file_name) + '.mp4', dpi=120,
                       writer='ffmpeg',
                       fps=int(1/(self._dtau * self._skip_rate))
             )
@@ -148,7 +150,7 @@ class CartPoleAnimator:
 
 
     def _update_animation(self, i):
-        """ callback function handed to FuncAnimation.
+        """ Callback function handed to FuncAnimation.
         """
         # current frame
         frame = i * self._skip_rate
@@ -196,9 +198,143 @@ class CartPoleAnimator:
                 self._time_text, self._variable_text)
 
 
+class HexacopterAnimator:
+    """ Class generating animation of hexacopter.
+    """
+    def __init__(self, log_dir, file_name: str='hexacopter'):
+        """ Constructor.
+
+        Args:
+            log_dir (str): Directory in which logs are stored.
+            file_name (str): Animation is saved as (filename).mp4.
+        """
+        self._log_dir = log_dir
+        self._file_name = file_name
+        self._ts = np.genfromtxt(join(log_dir, "t_log.txt"))
+        self._xs = np.genfromtxt(join(log_dir, "x_log.txt"))
+        self._us = np.genfromtxt(join(log_dir, "u_log.txt"))
+        if self._xs.ndim == 1:
+            self._xs = self._xs.reshape((-1, 1))
+        if self._us.ndim == 1:
+            self._us = self._us.reshape((-1, 1))
+        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
+        if self._us.shape[0] == self._xs.shape[0] - 1:
+            self._us = np.append(self._us, [self._us[-1]], axis=0)
+        self._dt = self._ts[1] - self._ts[0]
+        # size of hexacopter
+        self._r_body=0.10
+        self._r_prop=0.05
+        self._l_arm=0.2
+        # frame skip rate
+        self._skip_rate = 1
+        self._total_frames = (int)(self._ts.size / self._skip_rate)      
+
+    def generate_animation(self, save: bool=True, skip_rate: int=1):
+        """ Genarating animation.
+
+        Args:
+            save (bool): If True, animation is saved to log_dir.
+            skip_rate (int): Skip rate.
+        """
+        # frame skip
+        self._skip_rate = skip_rate
+        self._total_frames = (int)(self._ts.shape[0] / skip_rate)
+        # matplotlib
+        self._fig = plt.figure(figsize=(13, 13))
+        self._ax = self._fig.add_subplot(111, projection='3d')
+        self._ax.set_xlabel('x')
+        self._ax.set_ylabel('y')
+        self._ax.set_zlabel('z')
+        self._ax.set_xlim(-4.0, 4.0)
+        self._ax.set_ylim(-4.0, 4.0)
+        self._ax.set_zlim(-0.0, 8.0)
+        # initial state
+        state = self._xs[0, :]
+        # drone
+        self._lines = []
+        for i in range(6):
+            line = art3d.Line3D([], [], [], color='tab:blue', linewidth=3.0)
+            self._ax.add_line(line)
+            self._lines.append(line)
+        # body frame
+        self._frame = [0] * 3
+        self._framecolor = ['r', 'g', 'b']
+        for i in range(3):
+            self._frame[i] = self._ax.quiver(
+                *np.zeros(3), *np.zeros(3), color=self._framecolor[i]
+            )
+        # time text
+        self._ax.tick_params(color='white')
+        self._time_text = self._ax.text2D(
+            0.85,
+            0,
+            f'0.0 [s]',
+            transform=self._ax.transAxes,
+            fontsize=14
+        )
+        anim = FuncAnimation(
+            self._fig,
+            self._update_animation,
+            frames=self._total_frames,
+            interval=1000*self._dt*self._skip_rate,
+            blit=False
+        )
+        if save:
+            anim.save(join(self._log_dir, self._file_name) + '.mp4', dpi=120,
+                      writer='ffmpeg',
+                      fps=int(1/(self._dt * self._skip_rate))
+            )
+            print('Animation was saved at ' + self._log_dir + ' .')
+        plt.show()
+
+    def _update_animation(self, i):
+        """ Callback function handed to FuncAnimation.
+        """
+        frame = self._skip_rate * i
+        t = frame * self._dt
+        state = self._xs[frame, :]
+        self.draw_frame(t, state)
+
+    def draw_frame(self, t, state):
+        """ Draw a frame of a certain instant.
+        """
+        pos = state[0:3]
+        rpy = state[3:6]
+        wRb = self.rpy_to_rotmat(rpy)
+        # drone
+        for i in range(6):
+            theta = (1/6 + i/3) * np.pi
+            bl = self._l_arm * np.array([np.cos(theta), np.sin(theta), 0])
+            dest = pos + wRb @ bl
+            # print(pos, dir)
+            self._lines[i].set_data_3d([pos[0], dest[0]],
+                                       [pos[1], dest[1]],
+                                       [pos[2], dest[2]]
+            )
+        # body frame
+        for i in range(3):
+            self._frame[i].remove()
+            dest = wRb[:, i] * 0.8
+            self._frame[i] = self._ax.quiver(
+                *pos, *dest, color=self._framecolor[i]
+            )
+        # time text
+        self._time_text.set_text(f'{t:.1f} [s]')
+        
+    @staticmethod
+    def rpy_to_rotmat(rpy: np.ndarray):
+        """ Transform Roll-Pitch-Yaw expression into rotation matrix.
+        """
+        from scipy.spatial.transform import Rotation
+        rotation = Rotation.from_euler('xyz', rpy)
+        return rotation.as_matrix()
+
+
 # test
 if __name__ == '__main__':
-    log_dir = '/home/ohtsukalab/src/DDPython/log/cartpole'
-    sim_name = 'cartpole'
-    anim = CartPoleAnimator(log_dir, sim_name)
-    anim.generate_animation(save=False)
+    # log_dir = '/home/ohtsukalab/src/DDPython/log/cartpole'
+    # file_name = 'cartpole'
+    # anim = CartPoleAnimator(log_dir, file_name)
+    # anim.generate_animation(save=False)
+    animator = HexacopterAnimator('log/hexacopter', 'hexacopter')
+    animator.generate_animation(True)
