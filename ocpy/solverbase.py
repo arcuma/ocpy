@@ -209,13 +209,7 @@ class SolverBase(abc.ABC):
         """ Set stop tolerance.
         """
         pass
-
-    @abc.abstractmethod
-    def set_solver_parameters(self):
-        """ Set solver parameters.
-        """
-        pass
-    
+ 
     @abc.abstractmethod
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
