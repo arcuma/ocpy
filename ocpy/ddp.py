@@ -66,27 +66,6 @@ class DDPSolver(SolverBase):
         if stop_tol is not None:
             self._stop_tol = stop_tol
 
-    def set_solver_parameters(
-            self, gamma_init: float=None, rho_gamma: float=None,
-            gamma_min: float=None,  gamma_max: float=None, alphas: np.ndarray=None, 
-            stop_tol: float=None, max_iters: int=None, 
-        ):
-        """ Set solver parameters.
-
-        Args:
-            gamma_init (float): Initial value of regularization coefficient.
-            rho_gamma (float): Increasing/decreasing factor of gamma. (>1)
-            gamma_min (float): Minimum value of regularization.
-            gamma_max (float): Maximum value of regularization.
-            alphas (np.ndarray): Line search steps.
-            stop_tol (float): Stop threshold.
-            max_iters (int): Maximum numbar of iterations.
-        """
-        self.set_regularization_coeff(gamma_init, rho_gamma, gamma_min, gamma_max)
-        self.set_alphas(alphas)
-        self.set_stop_tol(stop_tol)
-        self.set_max_iters(max_iters)
-
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
