@@ -35,6 +35,7 @@ class UCRRSolver(SolverBase):
 
         self._result['cost_hist'] = None
         self._result['kkt_error_hist'] = None
+        self._result['dyn_feas_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
@@ -154,8 +155,8 @@ class UCRRSolver(SolverBase):
 
         time_start = time.perf_counter()
 
-        # solves
-        xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist,\
+        # solve
+        xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist, dyn_feas_hist,\
             gamma_hist, alpha_hist = self._solve(
                 f, fx, fu,
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
@@ -181,6 +182,7 @@ class UCRRSolver(SolverBase):
         self._result['computation_time'] = computation_time
         self._result['cost_hist'] = cost_hist
         self._result['kkt_error_hist'] = kkt_error_hist
+        self._result['dyn_feas_hist'] = dyn_feas_hist
         self._result['gamma_hist'] = gamma_hist
         self._result['alpha_hist'] = alpha_hist
         self._result['xs_opt'] = xs
@@ -218,6 +220,7 @@ class UCRRSolver(SolverBase):
         kkt_error = eval_kkt_error(f, fx, fu, lx, lu, lfx, 
                                    t0, x0, dt, xs, us, lmds)
         cost = eval_cost(l, lf, t0, dt, xs, us)
+        dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
 
         # cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
@@ -226,6 +229,10 @@ class UCRRSolver(SolverBase):
         # KKT error history
         kkt_error_hist = np.zeros(max_iters + 1, dtype=float)
         kkt_error_hist[0] = kkt_error
+
+        # dynamics feasibility history
+        dyn_feas_hist = np.zeros(max_iters + 1, dtype=float)
+        dyn_feas_hist[0] = dyn_feas
 
         # gamma history
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
@@ -265,6 +272,7 @@ class UCRRSolver(SolverBase):
                 As, Bs, Ps, ps, Ks, ks, x_bars, x0, xs[0]
             )
 
+            # line search
             xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha = line_search(
                 f, fx, fu, l, lx, lu, lf, lfx,
                 t0, x0, dt,
@@ -273,6 +281,10 @@ class UCRRSolver(SolverBase):
                 alphas, cost, kkt_error
             )
 
+            # evaluate dynamic feasibility
+            dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
+
+            # modify regularization coefficient
             if kkt_error_new < kkt_error:
                 gamma /= rho_gamma
             else:
@@ -290,6 +302,7 @@ class UCRRSolver(SolverBase):
 
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
+            dyn_feas_hist[iters] = dyn_feas
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
         else:
@@ -297,10 +310,12 @@ class UCRRSolver(SolverBase):
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
+        dyn_feas_hist = dyn_feas_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
 
-        return (xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist,
+        return (xs, us, lmds, ts, is_success,
+                cost_hist, kkt_error_hist, dyn_feas_hist,
                 gamma_hist, alpha_hist)
 
     def print_result(self):
@@ -375,8 +390,6 @@ def compute_linearlized_kkt_blocks(
     Qxxs = np.empty((N + 1, n_x, n_x))
     Qxus = np.empty((N, n_x, n_u))
     Quus = np.empty((N, n_u, n_u))
-
-    # (2.28c) - (2.28e)
     
     # LHS of (2.23c), (2.25b), (2.25c)
     x_bars = np.empty((N, n_x))
