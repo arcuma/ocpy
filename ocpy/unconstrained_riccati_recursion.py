@@ -12,7 +12,7 @@ from ocpy.solverbase import SolverBase
 
 
 class UCRRSolver(SolverBase):
-    """ Unconstrained Riccati Recursion Solver. OCP is discretized by \
+    """ Unconstrained Riccati Recursion Solver. Problem is formulated by \
         multiple-shooting method.
     """
     def __init__(self, ocp: OCP, init=True):
@@ -245,7 +245,6 @@ class UCRRSolver(SolverBase):
         is_success = False
 
         for iters in range(1, max_iters + 1):
-            # print(f'iters: {iters}', eval_dynamics_feasibility(f, t0, x0, dt, xs, us))
 
             if kkt_error < kkt_tol:
                 is_success = True
@@ -258,12 +257,12 @@ class UCRRSolver(SolverBase):
                 xs, us, lmds, t0, dt
             )
             As, Bs = kkt_blocks[0:2]
-            Qxxs, Qxus, Quus = kkt_blocks[2:5]
+            Qxxs, Quxs, Quus = kkt_blocks[2:5]
             x_bars, lx_bars, lu_bars = kkt_blocks[5:8]
 
             # (2.34) - (2.35e)
             Ps, ps, Ks, ks = backward_recursion(
-                As, Bs, Qxxs, Qxus, Quus,
+                As, Bs, Qxxs, Quxs, Quus,
                 x_bars, lx_bars, lu_bars, gamma
             )
 
@@ -281,7 +280,7 @@ class UCRRSolver(SolverBase):
                 alphas, cost, kkt_error
             )
 
-            # evaluate dynamic feasibility
+            # evaluate dynamics feasibility
             dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
 
             # modify regularization coefficient
@@ -388,7 +387,7 @@ def compute_linearlized_kkt_blocks(
     As = np.empty((N, n_x, n_x))
     Bs = np.empty((N, n_x, n_u))
     Qxxs = np.empty((N + 1, n_x, n_x))
-    Qxus = np.empty((N, n_x, n_u))
+    Quxs = np.empty((N, n_u, n_x))
     Quus = np.empty((N, n_u, n_u))
     
     # LHS of (2.23c), (2.25b), (2.25c)
@@ -409,7 +408,7 @@ def compute_linearlized_kkt_blocks(
         Bs[i] = fu(x, u, t) * dt
 
         Qxxs[i] = lxx(x, u, t) * dt
-        Qxus[i] = lux(x, u, t).T * dt
+        Quxs[i] = lux(x, u, t) * dt
         Quus[i] = luu(x, u, t) * dt
 
         x_bars[i] = x + f(x, u, t) * dt - x_1
@@ -421,7 +420,7 @@ def compute_linearlized_kkt_blocks(
     lx_bars[N] = lfx(xs[N], t0 + N*dt) - lmds[N]
 
     kkt_blocks = (As, Bs,
-                  Qxxs, Qxus, Quus,
+                  Qxxs, Quxs, Quus,
                   x_bars, lx_bars, lu_bars)
 
     return kkt_blocks
@@ -430,7 +429,7 @@ def compute_linearlized_kkt_blocks(
 @numba.njit
 def backward_recursion(
         As: np.ndarray, Bs: np.ndarray,
-        Qxxs: np.ndarray, Qxus: np.ndarray, Quus: np.ndarray,
+        Qxxs: np.ndarray, Quxs: np.ndarray, Quus: np.ndarray,
         x_bars: np.ndarray, lx_bars: np.ndarray, lu_bars: np.ndarray,
         gamma: float):
     """ Backward recursion.
@@ -454,16 +453,16 @@ def backward_recursion(
 
     for i in range(N - 1, -1, -1):
         F = Qxxs[i] + As[i].T @ Ps[i + 1] @ As[i]
-        H = Qxus[i] + As[i].T @ Ps[i + 1] @ Bs[i]
+        H = Quxs[i] + Bs[i].T @ Ps[i + 1] @ As[i]
         G = Quus[i] + Bs[i].T @ Ps[i + 1] @ Bs[i]
 
         G_inv = np.linalg.inv(G + Reg)
 
-        Ks[i] = -G_inv @ H.T
+        Ks[i] = -G_inv @ H
         ks[i] = -G_inv @ (Bs[i].T @ (Ps[i + 1] @ x_bars[i] + ps[i + 1]) + lu_bars[i])
  
         Ps[i] = F - Ks[i].T @ G @ Ks[i]
-        ps[i] = As[i].T @ (ps[i + 1] + Ps[i + 1] @ x_bars[i]) + lx_bars[i] + H @ ks[i]
+        ps[i] = As[i].T @ (ps[i + 1] + Ps[i + 1] @ x_bars[i]) + lx_bars[i] + H.T @ ks[i]
         
         # Ps[i] = (Ps[i] + Ps[i].T) / 2
     return Ps, ps, Ks, ks
@@ -495,6 +494,7 @@ def forward_recursion(
     dlmds[N] = Ps[N] @ dxs[N] + ps[N]
 
     return dxs, dus, dlmds
+
 
 @numba.njit
 def line_search(f, fx, fu, l, lx, lu, lf, lfx,
