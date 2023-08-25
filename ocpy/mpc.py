@@ -36,7 +36,9 @@ class MPC:
         self._result_mpc['xs'] = np.ndarray(0)
         self._result_mpc['us'] = np.ndarray(0)
         self._result_mpc['ts'] = np.ndarray(0)
+        self._result_mpc['noi_hist'] = np.ndarray(0)
         self._result_mpc['noi_ave'] = None
+        self._result_mpc['computation_time_hist'] = np.ndarray(0)
         self._result_mpc['computation_time_ave'] = None
 
         self._initialized = False
@@ -68,7 +70,8 @@ class MPC:
         self._initialized = True
 
     def run(self, T_sim: float=20, sampling_time: float=0.005,
-            max_iters_mpc: int=5, result=True, log=True, plot=True):
+            max_iters_mpc: int=5, feedback_delay=False,
+            result=True, log=True, plot=True):
         """ Run MPC.
 
         Args:
@@ -76,6 +79,8 @@ class MPC:
             sampling_time (float): Sampling time. OCP must be solved within \
                 sampling time.
             mpc_max_iters (int): Maximum iteration number of OCP at each samping.
+            feedback_delay (bool=False): If True, input is delayed for the \
+                sampling time.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
@@ -102,45 +107,59 @@ class MPC:
         xs_real = []
         us_real = []
 
-        total_time = 0.0
-        total_noi = 0
+        # history of NOI
+        noi_hist = []
+        computation_time_hist = []
+
+        # for feedback delay
+        u = solver._us_guess[0, :]
 
         # MPC
         for t in ts_real:
+
+            if feedback_delay:
+                x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
+                # save
+                xs_real.append(x)
+                us_real.append(u)
+
             solver.set_initial_condition(t, x)
             solver.solve(warm_start=True, gamma_fixed=0.0)
 
             # In MPC, we use initial value of optimal input trajectory.
             us_opt = solver.get_us_opt()
             u = us_opt[0]
-            x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
 
-            # save
-            xs_real.append(x)
-            us_real.append(u)
+            if not feedback_delay:
+                x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
+                # save
+                xs_real.append(x)
+                us_real.append(u)
 
+            # get result
             result = solver.get_result()
-            computation_time = result['computation_time']
             noi = result['noi']
-            total_time += computation_time
-            total_noi += noi            
+            computation_time = result['computation_time']
+            noi_hist.append(noi)
+            computation_time_hist.append(computation_time)
 
-            # for the next sampling time
+            # update current state
             x = x_next
 
         # convert into numpy
         xs_real = np.array(xs_real, dtype=float)
         us_real = np.array(us_real, dtype=float)
 
-        # average computation time
-        noi_ave = total_noi / len(ts_real)
-        computation_time_ave = total_time / len(ts_real)
+        noi_hist = np.array(noi_hist, dtype=int)
+        computation_time_hist = np.array(computation_time_hist, dtype=float)
 
         self._result_mpc['xs'] = xs_real
         self._result_mpc['us'] = us_real
         self._result_mpc['ts'] = ts_real
-        self._result_mpc['noi_ave'] = noi_ave
-        self._result_mpc['computation_time_ave'] = computation_time_ave
+        self._result_mpc['noi_hist'] = noi_hist
+        self._result_mpc['noi_ave'] = np.mean(noi_hist)
+        self._result_mpc['computation_time_hist'] = computation_time_hist
+        self._result_mpc['computation_time_ave'] = np.mean(computation_time_hist)
 
         if result:
            self.print_result() 
