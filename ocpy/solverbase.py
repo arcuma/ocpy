@@ -167,6 +167,9 @@ class SolverBase(abc.ABC):
             assert N > 0
             self._N = N
         self._dt = self._T / self._N
+        print("Method set_horizon(T, N) was called.")
+        print("If you changed horizon parameters, do not forget to call "
+              "set_guess() or reset_guess() to change initial guess.")
 
     def get_xs_opt(self):
         """ Get optimal state trajectory.
@@ -220,7 +223,7 @@ class SolverBase(abc.ABC):
     def solve(
             self,
             gamma_fixed: float=None, enable_line_search: bool=True,
-            warm_start: bool=False,
+            max_iters: int=None, warm_start: bool=False,
             result: bool=False, log: bool=False, plot: bool=False
         ):
         """ Solve ocp.

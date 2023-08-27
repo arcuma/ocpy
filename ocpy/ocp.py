@@ -94,7 +94,7 @@ class OCP:
             h (sym.Matrix): Equality constraints. \
                 If there is no equality constraints, pass None.
             t0 (float): Initial time.
-            x0 (numpy.array): Initial state. Size must be n_x.
+            x0 (np.ndarray): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
@@ -106,13 +106,22 @@ class OCP:
         n_x, n_u = self._n_x, self._n_u
 
         t0 = float(t0) if t0 is not None else 0.0
+
         if x0 is not None:
             x0 = np.array(x0, dtype=float)
             assert x0.shape[0] == n_x
         else:
             x0 = np.zeros(n_x)
-        T = float(T) if T is not None else 5.0
-        N = int(N) if N is not None else 200
+        
+        if T is None:
+            T = 5.0
+            print(f"T was set to the defalut value {T}.")
+        if N is None:
+            N = 200
+            print(f"N was set to the defalut value {N}.")
+
+        T = float(T)
+        N = int(N)
 
         # if l and lf are 1x1 Matrix, turn it into Symbol
         if isinstance(l, sym.Matrix):
@@ -181,7 +190,7 @@ class OCP:
         self._is_ocp_defined = True
         
         # generate lambda function.
-        self._lambdify()
+        self.lambdify()
 
     def define_unconstrained(self,
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
@@ -195,7 +204,7 @@ class OCP:
             l (sym.Symbol): Stage cost.
             lf (sym.Symbol): Terminal cost.
             t0 (float): Initial time.
-            x0 (numpy.array): Initial state. Size must be n_x.
+            x0 (np.ndarray): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
@@ -206,7 +215,7 @@ class OCP:
         self.define(f=f, l=l, lf=lf, g=None, h=None,t0=t0 , x0=x0, T=T, N=N,
                     is_continuous=is_continuous, simplification=simplification)
 
-    def _lambdify(self) -> tuple[list, list]:
+    def lambdify(self) -> tuple[list, list]:
         """ Generate sympy symbolic expression into numpy function.\
 
         Returns:
@@ -572,7 +581,7 @@ class OCP:
         """
         Args:
             constant_name (str): Name of constant.
-            vector_value (np.ndarray): 1d numpy array.
+            vector_value (np.ndarray): 1d ndarray.
         Returns:
             vector_symbol (sym.Matrix) : n*1-size sympy.Matrix
         """
@@ -600,7 +609,7 @@ class OCP:
         """
         Args:
             constant_name (str): Name of constant.
-            vector_value (np.ndarray): 2d numpy array.
+            vector_value (np.ndarray): 2d ndarray.
 
         Returns:
             matrix_symbol (sym.Matrix) : m*n-size sympy.Matrix
@@ -647,7 +656,7 @@ class OCP:
             g (sym.Matrix): Inequality constraints.
             h (sym.Matrix): Inequality constraints.
             t0 (float): Initial Time.
-            x0 (numpy.array): Initial state. size must be n_x.
+            x0 (np.ndarray): Initial state. size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grids.
             scalar_dict (dict) : {"name": (symbol, value)})
