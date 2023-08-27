@@ -95,9 +95,9 @@ class DDPSolver(SolverBase):
             plot (bool): If true, graphs are generated (and saved if log==True).
         
         Returns:
-            xs (numpy.ndarray): optimal state trajectory. (N + 1) * n_x
-            us (numpy.ndarray): optimal control trajectory. N * n_u
-            ts (numpy.ndarray): Discretized Time at each stage.
+            xs (np.ndarray): optimal state trajectory. (N + 1) * n_x
+            us (np.ndarray): optimal control trajectory. N * n_u
+            ts (np.ndarray): Discretized Time at each stage.
             is_success (bool): Success or not.
         """
         if gamma_fixed is None:
@@ -183,13 +183,16 @@ class DDPSolver(SolverBase):
             stop_tol, max_iters, is_ddp
         ):
         """ DDP algorithm.
+
+        Returns:
+            (xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist)
         """
         dt = T / N
         us = us_guess
         gamma = gamma_init
 
         # initial rollout
-        xs, cost = rollout(f, l, lf, x0, us, t0, dt)
+        xs, cost = rollout(f, l, lf, t0, x0, dt, us)
 
         # cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
@@ -210,8 +213,10 @@ class DDPSolver(SolverBase):
 
             # backward pass
             ks, Ks, delta_V = backward_pass(
-                fx, fu, fxx, fux, fuu, lx, lu, lxx, lux, luu, lfx, lfxx,
-                xs, us, t0, dt, gamma, is_ddp
+                fx, fu, fxx, fux, fuu,
+                lx, lu, lxx, lux, luu, lfx, lfxx,
+                t0, dt, xs, us,
+                gamma, is_ddp
             )
 
             if np.abs(delta_V) < stop_tol:
@@ -223,7 +228,9 @@ class DDPSolver(SolverBase):
             for alpha in alphas:
                 # forward pass
                 xs_new, us_new, cost_new = forward_pass(
-                    f, l, lf, xs, us, t0, dt, ks, Ks, alpha
+                    f, l, lf,
+                    t0, dt, xs, us,
+                    ks, Ks, alpha
                 )
                 if cost_new < cost:
                     gamma /= rho_gamma
@@ -290,7 +297,7 @@ class DDPSolver(SolverBase):
 
 #### DDP FUNCTIONS ####
 @numba.njit
-def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
+def rollout(f, l, lf, t0: float, x0: np.ndarray, dt: float, us: np.ndarray):
     """ Rollout state trajectory from initial state and input trajectory,\
         with cost is calculated.
 
@@ -299,9 +306,9 @@ def rollout(f, l, lf, x0: np.ndarray, us: np.ndarray, t0: float, dt: float):
         l (function): Stage cost function.
         lf (function): Terminal cost function.
         t0 (float): Initial time.                
+        dt (float): Discrete time step.
         x0 (np.ndarray): Initial state.
         us (np.ndarray): Input control trajectory.
-        dt (float): Discrete time step.
     """
     N = us.shape[0]
     xs = np.zeros((N + 1, x0.shape[0]))
@@ -337,7 +344,7 @@ def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
 @numba.njit
 def backward_pass(fx, fu, fxx, fux, fuu, 
                   lx, lu, lxx, lux, luu, lfx, lfxx,
-                  xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
+                  t0: float, dt: float, xs: np.ndarray, us: np.ndarray,
                   gamma: float=0.0, is_ddp: bool=True):
     """ Backward pass of DDP.
 
@@ -353,19 +360,19 @@ def backward_pass(fx, fu, fxx, fux, fuu,
         lux (function): Derivative of l w.r.t. state u and x.
         luu (function): Derivative of l w.r.t. state u and u.
         lfx (function): Derivative of lf w.r.t. state x.
-        lfxx (function): Derivative of l w.r.t. state x and x.
-        xs (numpy.ndarray): Nominal state trajectory.\
-            Size must be (N+1)*n_u.
-        us (numpy.ndarray): Nominalcontrol trajectory.\
-            Size must be N*n_u.
+        lfxx (function): Derivative of lf w.r.t. state x and x.
         t0 (float): Initial time.
         dt (float): Discrete time step.
+        xs (np.ndarray): Nominal state trajectory.\
+            Size must be (N+1)*n_x.
+        us (np.ndarray): Nominalcontrol trajectory.\
+            Size must be N*n_u.
         gamma (float): regularization coefficient.
         is_ddp (bool): If False, iLQR is applied.
 
     Returns:
-        ks (numpy.ndarray): Series of k. Its size is N * n_u
-        Ks (numpy.ndarray): Series of K. Its size is N * (n_u * n_x)
+        ks (np.ndarray): Series of k. Its size is N * n_u
+        Ks (np.ndarray): Series of K. Its size is N * (n_u * n_x)
         Delta_V (float): Expecting change of value function at stage 0.
     """
     N = us.shape[0]
@@ -435,27 +442,27 @@ def backward_pass(fx, fu, fxx, fux, fuu,
 
 @numba.njit
 def forward_pass(f, l, lf, 
-                    xs: np.ndarray, us: np.ndarray, t0: float, dt: float,
-                    ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
+                 t0: float, dt: float, xs: np.ndarray, us: np.ndarray,
+                 ks: np.ndarray, Ks: np.ndarray, alpha: float=1.0):
     """ Forward pass of DDP.
 
     Args:
         f (function): State function.
         l (function): Stage cost function.
         lf (function): Terminal cost function.
-        xs (numpy.ndarray): Nominal state trajectory.\
-            Size must be (N+1)*n_u
-        us (numpy.ndarray): Nominal control trajectory.\
-            Size must be N*n_u
         t0 (float): Initial time.
         dt (float): Discrete time step.
-        ks (numpy.ndarray): Series of k. Size must be N * n_u.
-        Ks (numpy.ndarray): Series of K. Size must be N * (n_u * n_x).
+        xs (np.ndarray): Nominal state trajectory.\
+            Size must be (N+1)*n_x
+        us (np.ndarray): Nominal control trajectory.\
+            Size must be N*n_u
+        ks (np.ndarray): Series of k. Size must be N * n_u.
+        Ks (np.ndarray): Series of K. Size must be N * (n_u * n_x).
         alpha (float): step Size of line search. 0 <= alpha <= 1.0.
 
     Returns:
-        xs_new (numpy.ndarray): New state trajectory.
-        us_new (numpy.ndarray): New control trajectory.
+        xs_new (np.ndarray): New state trajectory.
+        us_new (np.ndarray): New control trajectory.
         cost_new (float): Cost along with (xs_new, us_new).
     """
     N = us.shape[0]

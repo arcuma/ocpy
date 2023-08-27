@@ -115,9 +115,9 @@ class UCRRSolver(SolverBase):
             plot (bool): If true, graphs are generated and saved.
         
         Returns:
-            ts (numpy.ndarray): Discretized Time at each stage.
-            xs (numpy.ndarray): Optimal state trajectory. (N + 1) * n_x.
-            us (numpy.ndarray): Optimal control trajectory. N * n_u.
+            ts (np.ndarray): Discretized Time at each stage.
+            xs (np.ndarray): Optimal state trajectory. (N + 1) * n_x.
+            us (np.ndarray): Optimal control trajectory. N * n_u.
             is_success (bool): Success or not.
         """
         if gamma_fixed is None:
@@ -211,6 +211,11 @@ class UCRRSolver(SolverBase):
                gamma_init, rho_gamma, gamma_min, gamma_max,
                alphas, kkt_tol, max_iters):
         """ Riccati Recursion algorighm.
+
+        Returns: (xs, us, lmds, ts, is_success,
+                  cost_hist, kkt_error_hist, dyn_feas_hist,
+                  gamma_hist, alpha_hist)
+
         """
         dt = T / N
         ts = np.array([t0 + i * dt for i in range(N + 1)])
@@ -253,8 +258,10 @@ class UCRRSolver(SolverBase):
 
             # (2.26a) - (2.26g)
             kkt_blocks = compute_linearlized_kkt_blocks(
-                f, fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
-                xs, us, lmds, t0, dt
+                f, fx, fu,
+                lx, lu, lxx, lux, luu, lfx, lfxx,
+                t0, dt,
+                xs, us, lmds
             )
             As, Bs = kkt_blocks[0:2]
             Qxxs, Quxs, Quus = kkt_blocks[2:5]
@@ -268,12 +275,15 @@ class UCRRSolver(SolverBase):
 
             # (2.26b), (2.36), (2.33)
             dxs, dus, dlmds = forward_recursion(
-                As, Bs, Ps, ps, Ks, ks, x_bars, x0, xs[0]
+                x0, xs[0], 
+                Ps, ps, Ks, ks, 
+                As, Bs, x_bars
             )
 
             # line search
             xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha = line_search(
-                f, fx, fu, l, lx, lu, lf, lfx,
+                f, fx, fu,
+                l, lx, lu, lf, lfx,
                 t0, x0, dt,
                 xs, us, lmds,
                 dxs, dus, dlmds,
@@ -338,7 +348,7 @@ class UCRRSolver(SolverBase):
         if noi >= 1:
             print(f'per update : {computation_time / noi:.6f} [s]')
         print(f'final cost value: {cost:.8f}')
-        print(f'final KKT error: {kkt_error}')
+        print(f'final KKT error: {kkt_error:.8f}')
         print('----------------------------------------------')
 
 
@@ -368,9 +378,10 @@ class UCRRSolver(SolverBase):
 
 @numba.njit
 def compute_linearlized_kkt_blocks(
-        f, fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
-        xs: np.ndarray, us: np.ndarray, lmds: np.ndarray,
-        t0: float, dt: float
+        f, fx, fu, lx, 
+        lu, lxx, lux, luu, lfx, lfxx,
+        t0: float, dt: float,
+        xs: np.ndarray, us: np.ndarray, lmds: np.ndarray
     ):
     """ Compute blocks of linealized kkt systems.
 
@@ -470,9 +481,9 @@ def backward_recursion(
 
 @numba.njit
 def forward_recursion(
-        As, Bs,
+        x0, xs0,
         Ps, ps, Ks, ks, 
-        x_bars, x0, xs0):
+        As, Bs, x_bars):
     """ Forward recursion.
 
     Returns:
@@ -497,15 +508,16 @@ def forward_recursion(
 
 
 @numba.njit
-def line_search(f, fx, fu, l, lx, lu, lf, lfx,
-                t0, x0, dt, xs, us, lmds,
+def line_search(f, fx, fu, 
+                l, lx, lu, lf, lfx,
+                t0, x0, dt,
+                xs, us, lmds,
                 dxs, dus, dlmds,
                 alphas, cost, kkt_error):
     """ Line search (multiple-shooting).
     
     Returns:
-        tuple (np.ndarray): (xs_new, us_new, lmds_new, \
-            cost_new, kkt_error_new, alpha)
+        tuple : (xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha)
     """
     N = us.shape[0]
 
@@ -570,12 +582,14 @@ def eval_kkt_error(f, fx, fu, lx, lu, lfx,
     """ Evaluate KKT error.
 
     Returns:
-        kkt_error (float): Square root of KKT RSS.
+        kkt_error (float): Square root of KKT RSS (Residual Sum of Square).
     """
     N = us.shape[0]
 
     kkt_error = 0.0
-    kkt_error += np.sum((xs[0] - x0) ** 2)
+
+    res = x0 - xs[0]
+    kkt_error += np.sum(res ** 2)
 
     for i in range(N):
         x = xs[i]
@@ -620,16 +634,18 @@ def eval_dynamics_feasibility(f, t0, x0, dt, xs, us):
 
 
 @numba.njit
-def rollout(f, xs: np.ndarray, us: np.ndarray, t0: float, dt: float):
+def rollout(f, t0: float, dt: float, xs: np.ndarray, us: np.ndarray):
     """ Rollout (multiple-shooting).
 
     Returns:
         xs_new (np.ndarray): New trajectory of state.
     """
+    N = us.shape[0]
+
     xs_new = np.empty(xs.shape)
     xs_new[0] = xs[0]
 
-    for i in range(us.shape[0]):
+    for i in range(N):
         xs_new = xs[i] + f(xs[i], us[i], t0 + i * dt) * dt
 
     return xs_new

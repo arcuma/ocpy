@@ -86,9 +86,9 @@ class MPC:
             plot (bool): If true, graphs are generated and saved.
         
         Returns:
-            xs_real (numpy.ndarray): State History.
-            us_real (numpy.ndarray): Control History.
-            ts_real (numpy.ndarray): Time at each stage.
+            xs_real (np.ndarray): State History.
+            us_real (np.ndarray): Control History.
+            ts_real (np.ndarray): Time at each stage.
         """
         assert T_sim > 0
         assert sampling_time > 0
@@ -97,7 +97,6 @@ class MPC:
         x = self._x0.copy()
         f = self._f
         solver = self._solver
-
 
         self._solver.set_max_iters(max_iters_mpc)
 

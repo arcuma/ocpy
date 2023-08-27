@@ -94,7 +94,7 @@ class OCP:
             h (sym.Matrix): Equality constraints. \
                 If there is no equality constraints, pass None.
             t0 (float): Initial time.
-            x0 (numpy.array): Initial state. Size must be n_x.
+            x0 (np.ndarray): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
@@ -204,7 +204,7 @@ class OCP:
             l (sym.Symbol): Stage cost.
             lf (sym.Symbol): Terminal cost.
             t0 (float): Initial time.
-            x0 (numpy.array): Initial state. Size must be n_x.
+            x0 (np.ndarray): Initial state. Size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grid number.
             is_continuous (bool=True): Is dynamics and costs are continuous-time.\
@@ -581,7 +581,7 @@ class OCP:
         """
         Args:
             constant_name (str): Name of constant.
-            vector_value (np.ndarray): 1d numpy array.
+            vector_value (np.ndarray): 1d ndarray.
         Returns:
             vector_symbol (sym.Matrix) : n*1-size sympy.Matrix
         """
@@ -609,7 +609,7 @@ class OCP:
         """
         Args:
             constant_name (str): Name of constant.
-            vector_value (np.ndarray): 2d numpy array.
+            vector_value (np.ndarray): 2d ndarray.
 
         Returns:
             matrix_symbol (sym.Matrix) : m*n-size sympy.Matrix
@@ -656,7 +656,7 @@ class OCP:
             g (sym.Matrix): Inequality constraints.
             h (sym.Matrix): Inequality constraints.
             t0 (float): Initial Time.
-            x0 (numpy.array): Initial state. size must be n_x.
+            x0 (np.ndarray): Initial state. size must be n_x.
             T (float): Horizon length.
             N (int): Discretization grids.
             scalar_dict (dict) : {"name": (symbol, value)})
