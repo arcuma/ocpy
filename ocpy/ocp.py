@@ -11,18 +11,29 @@ from ocpy.constraints import SymIneqConstraints, NumIneqConstraints,\
 class OCP:
     """ Class that describes optimal control problem.
     """
-    def __init__(self, n_x: int, n_u: int, ocp_name: str):
+    def __init__(self, ocp_name: str, n_x: int, n_u: int, n_g=0, n_h=0):
         """ Constructor.
 
         Args:
+            ocp_name (str): Simulation name.
             n_x (int): Dimension of state.
             n_u (int): Dimension of input.
-            ocp_name (str): Simulation name.
+            n_g (int): Dimension of inequality constraints.
+            n_h (int): Dimension of equality constraints.
         """
-
+        self._ocp_name = ocp_name
         self._n_x = n_x
         self._n_u = n_u
-        self._ocp_name = ocp_name
+        self._n_g = n_g
+        self._n_h = n_h
+
+        self._has_ineq_constraints = False
+        if n_g > 0:
+            self._has_ineq_constraints = True
+
+        self._has_eq_constraints = False
+        if n_h > 0:
+            self._has_eq_constraints = True
 
         # state and input (symbol)
         self._x = symutils.define_vector('x', n_x)
@@ -47,7 +58,6 @@ class OCP:
         self._is_continuous = None
         self._f_original = None
         self._l_original = None
-        self._lf_original = None        
         self._sym_dynamics = None
         self._sym_cost = None
         self._sym_ineq_constraints = None
@@ -56,10 +66,6 @@ class OCP:
         self._dl_sym = None
         self._dg_sym = None
         self._dh_sym = None
-        self._n_g = 0
-        self._n_h = 0
-        self._has_ineq_constraints = False
-        self._has_eq_constraints = False
         self._is_ocp_defined = False
 
         # in lambdify()
@@ -79,7 +85,7 @@ class OCP:
 
     def define(self,
             f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
-            g: sym.Matrix, h: sym.Matrix,
+            g: sym.Matrix=None, h: sym.Matrix=None,
             t0: float=None, x0: np.ndarray=None, T: float=None, N: int=None,
             is_continuous: bool=True, simplification: bool=False
         ):
@@ -137,32 +143,26 @@ class OCP:
             # if discrete, regard it discretized by forward-Euler method.
             sym_dynamics = SymDynamics(x, u, t, (f - x) / dt)
             sym_cost = SymCost(x, u, t, l / dt, lf)
-        # f, fx, fu, fxx, fux, fuu
+        # (f, fx, fu, fxx, fux, fuu)
         df_sym = sym_dynamics.get_derivatives()
-        # l, lx, lu, lxx, lux, luu, lf, lfx, lfxx
+        # (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         dl_sym = sym_cost.get_derivatives()
 
         # inequality constraints
         if g is not None:
             sym_ineq_constraints = SymIneqConstraints(x, u, t, g)
             dg_sym = sym_ineq_constraints.get_derivatives()
-            has_ineq_constraints = True
             # hold
             self._sym_ineq_constraints = sym_ineq_constraints
             self._dg_sym = dg_sym
-            self._n_g = len(g)
-            self._has_ineq_constraints = has_ineq_constraints
 
         # equality constraints
         if h is not None:
             sym_eq_constraints = SymEqConstraints(x, u, t, h)
             dh_sym = sym_eq_constraints.get_derivatives()
-            has_eq_constraints = True
             # hold
             self._sym_ineq_constraints = sym_eq_constraints
             self._dh_sym = dh_sym
-            self._n_h = len(h)
-            self._has_eq_constraints = has_eq_constraints
 
         # simplify
         if simplification:
@@ -184,7 +184,6 @@ class OCP:
         self._sym_cost = sym_cost
         self._f_original = f
         self._l_original = l
-        self._lf_original = lf
         self._df_sym = df_sym
         self._dl_sym = dl_sym
         self._is_ocp_defined = True
@@ -215,7 +214,7 @@ class OCP:
         self.define(f=f, l=l, lf=lf, g=None, h=None,t0=t0 , x0=x0, T=T, N=N,
                     is_continuous=is_continuous, simplification=simplification)
 
-    def lambdify(self) -> tuple[list, list]:
+    def lambdify(self):
         """ Generate sympy symbolic expression into numpy function.\
 
         Returns:
@@ -685,7 +684,8 @@ class OCP:
         from sympy import sin, cos, ln
         n_x = 4
         n_u = 1
-        cartpole_ocp = OCP(n_x, n_u, 'cartpole')
+        sim_name = 'cartpole'
+        cartpole_ocp = OCP(sim_name, n_x, n_u)
         t = cartpole_ocp.get_t()
         x = cartpole_ocp.get_x()
         u = cartpole_ocp.get_u()

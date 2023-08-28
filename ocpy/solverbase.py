@@ -27,14 +27,21 @@ class SolverBase(abc.ABC):
         self._n_x = ocp.get_n_x()
         self._n_u = ocp.get_n_u()
 
+        # initial time and state
+        self._t0 = ocp.get_t0()
+        self._x0 = ocp.get_x0()
+
         # Horizon length, num of discretization, time step.
         self._T = ocp.get_T()
         self._N = ocp.get_N()
         self._dt = self._T / self._N
 
-        # initial time and state
-        self._t0 = ocp.get_t0()
-        self._x0 = ocp.get_x0()
+        # derivatives of functions
+        self._df = ocp.get_df()
+        self._dl = ocp.get_dl()
+        self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
+        self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
+            self._lf, self._lfx, self._lfxx = self._dl
 
         # stepsize of line search.
         self._alphas = np.array([0.5**i for i in range(8)])
@@ -64,13 +71,6 @@ class SolverBase(abc.ABC):
         self._result['is_success'] = None
         self._result['noi'] = None
         self._result['computation_time'] = None
-
-        # derivatives of functions
-        self._df = ocp.get_df()
-        self._dl = ocp.get_dl()
-        self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
-        self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
-            self._lf, self._lfx, self._lfxx = self._dl
 
     def ocp(self):
         """ Return OCP.
@@ -203,13 +203,7 @@ class SolverBase(abc.ABC):
 
     @abc.abstractmethod
     def reset_guess(self):
-        """ Reset guess to zero.
-        """
-        pass
-
-    @abc.abstractmethod
-    def set_stop_tol(self, stop_tol: float=None):
-        """ Set stop tolerance.
+        """ Reset guess.
         """
         pass
  
