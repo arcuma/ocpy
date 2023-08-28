@@ -75,7 +75,7 @@ class UCRRSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lmds_guess = np.zeros((self._N + 1, self._n_x))
 
-    def set_stop_tol(self, kkt_tol: float=None):
+    def set_kkt_tol(self, kkt_tol: float=None):
         """ Set stop criterion. 
 
         Args:
