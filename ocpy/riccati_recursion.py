@@ -1,3 +1,5 @@
+# WIP
+
 import sympy as sym
 import numpy as np
 import numba
@@ -11,8 +13,8 @@ from ocpy.plotter import Plotter
 from ocpy.solverbase import SolverBase
 
 
-class UCRRSolver(SolverBase):
-    """ Unconstrained Riccati Recursion Solver. Problem is formulated by \
+class RiccatiRecursionSolver(SolverBase):
+    """ Riccati Recursion Solver. Problem is formulated by \
         multiple-shooting method.
     """
     def __init__(self, ocp: OCP, init=True):
@@ -23,50 +25,80 @@ class UCRRSolver(SolverBase):
             init (bool=True): If True, call init_solver(). It may take time.
         """
         super().__init__(ocp)
-        self._solver_name = 'UCRR'
+        self._solver_name = 'RiccatiRecursion'
 
-        self._kkt_tol = 1e-2
+        self._n_g = ocp.get_n_g()
+        self._has_ineq_constr = False
+        if self._n_g > 0:
+            self._has_ineq_constr = True
+        self._dg = ocp.get_dg()
+
+        self._epsilon_init = 1e-2
+        self._rho_epsilon = 0.1
+        self._epsilon_tol = 1e-4
+
+        self._kkt_tol = 1e-4
 
         self._xs_guess = np.zeros((self._N + 1, self._n_x))
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lmds_guess = np.zeros((self._N + 1, self._n_x))
+        self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
+        self._mus_guess = self.generate_mus(self._ss_guess, self._epsilon_init)
 
         self._lmds_opt = np.zeros((self._N + 1, self._n_x))
+        self._ss_opt = np.ones((self._N, self._n_g))
+        self._mus_opt = np.ones((self._N, self._n_g))
 
         self._result['cost_hist'] = None
         self._result['kkt_error_hist'] = None
         self._result['dyn_feas_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
+        self._result['epsilon_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
         self._result['lmds_opt'] = np.ndarray(0)
+        self._result['ss_opt'] = np.ndarray(0)
+        self._result['mus_opt'] = np.ndarray(0)
         self._result['ts'] = np.ndarray(0)
 
         if init:
             self.init_solver()
 
     def set_guess(self, xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
-                  lmds_guess: np.ndarray=None):
+                  lmds_guess: np.ndarray=None,
+                  ss_guess: np.ndarray=None, mus_guess: np.ndarray=None):
         """ Set initial guess of xs, us, and lmds.
 
         Args:
             xs_guess (np.ndarray): Guess of state trajectory. (N + 1)*n_x.
             us_guess (np.ndarray): Guess of input trajectory. N*n_u.
             lmds_guess (np.ndarray): Guess of costate trajectory. (N + 1)*n_x.
+            ss_guess (np.ndarray): Guess of slack variables of ineqality \
+                constraints. N*n_g.
+            mus_guess (np.ndarray): Guess of lagrange variables of ineqality \
+                constraints. N*n_g.
         """
-        if us_guess is not None:
-            us_guess = np.asarray(us_guess, dtype=float)
-            assert us_guess.shape == (self._N, self._n_u)
-            self._us_guess = us_guess
         if xs_guess is not None:
             xs_guess = np.asarray(xs_guess, dtype=float)
             assert xs_guess.shape == (self._N + 1, self._n_x)
             self._xs_guess = xs_guess
+        if us_guess is not None:
+            us_guess = np.asarray(us_guess, dtype=float)
+            assert us_guess.shape == (self._N, self._n_u)
+            self._us_guess = us_guess
         if lmds_guess is not None:
             lmds_guess = np.asarray(lmds_guess, dtype=float)
             assert lmds_guess.shape == (self._N + 1, self._n_x)
             self._lmds_guess = lmds_guess
+        if ss_guess is not None:
+            ss_guess = np.asarray(ss_guess, dtype=float)
+            assert ss_guess.shape == (self._N, self._n_g)
+            self._ss_guess = ss_guess
+        if mus_guess is not None:
+            mus_guess = np.asarray(mus_guess, dtype=float)
+            assert mus_guess.shape == (self._N, self._n_g)
+            self._mus_guess = mus_guess
 
     def reset_guess(self):
         """ Reset guess to zero.
@@ -74,9 +106,58 @@ class UCRRSolver(SolverBase):
         self._xs_guess = np.zeros((self._N + 1, self._n_x))
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lmds_guess = np.zeros((self._N + 1, self._n_x))
+        self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
+        self._mus_guess = self.generate_mus(self._ss_guess, self._epsilon_init)
+        # self._ss_guess = np.ones((self._N, self._n_g))
+        # self._mus_guess = self._epsilon_init * np.ones((self._N, self._n_g))
+    
+    def generate_ss(self, xs: np.ndarray, us: np.ndarray):
+        """ Reset trajectory of slack variables of inequality constraints.
+
+        Args:
+            xs (np.ndarray): Guess of state trajectory. (N + 1)*n_x.
+            us (np.ndarray): Guess of input trajectory. N*n_u.
+        
+        Returns:
+            ss (np.ndarray): Trajectory of slack variables of inequality \
+                constraints. N*n_g.
+        """
+        if not self._has_ineq_constr:
+            print('OCP does not have inequality constraint.')
+            return np.ones((self._N, self._n_g))
+
+        g = self._dg[0]
+        t0 = self._t0
+        dt = self._dt
+
+        ss = np.empty((self._N, self._n_g))
+
+        for i in range(ss.shape[0]):
+            ss[i] = -g(xs[i], us[i], t0 + i * dt)
+
+        return ss
+
+    def generate_mus(self, ss: np.ndarray, epsilon: float):
+        """ Reset trajectory of lagrange variables of inequality constraints.
+
+        Args:
+            ss (np.ndarray): Trajectory of slack variables of inequality \
+                constraints. N*n_g.
+            
+        Returns:
+            mus (np.ndarray): Trajectory of lagrange variables of inequality \
+                constraints. N*n_g.
+        """
+        if not self._has_ineq_constr:
+            print('OCP does not have inequality constraint.')
+            return np.ones((self._N, self._n_g))
+
+        mus = epsilon * np.reciprocal(ss)
+
+        return mus
 
     def set_kkt_tol(self, kkt_tol: float=None):
-        """ Set stop criterion. 
+        """ Set KKT error tolerance. 
 
         Args:
             kkt_tol (float): Threshold of KKT error at each epsilon.
@@ -84,6 +165,23 @@ class UCRRSolver(SolverBase):
         if kkt_tol is not None:
             assert kkt_tol > 0
             self._kkt_tol = kkt_tol
+    
+    def set_epsilon(
+            self, epsilon_init: float=None, rho_epsilon: float=None,
+            epsilon_tol: float=None):
+        """ Set parameters related to barrier function.
+
+        Args:
+            epsilon_init (float): Initial value of barrier coefficient.
+            rho_epsilon (float): Update rate of barrier coefficient.
+            epsilon_tol (float): Stop tolerance of barrier coefficient.
+        """
+        if epsilon_init is not None:
+            self._epsilon_init = epsilon_init
+        if rho_epsilon is not None:
+            self._rho_epsilon = rho_epsilon
+        if epsilon_tol is not None:
+            self._epsilon_tol = epsilon_tol
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
@@ -108,6 +206,7 @@ class UCRRSolver(SolverBase):
         Args:
             gamma_fixed (float): If set, regularization coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
+            max_iters (int): Number of max iterations.
             warm_start (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
@@ -141,14 +240,19 @@ class UCRRSolver(SolverBase):
             xs_guess = self._xs_opt
             us_guess = self._us_opt
             lmds_guess = self._lmds_opt
+            ss_guess = self._ss_opt
+            mus_guess = self._mus_opt
         else:
             xs_guess = self._xs_guess
             us_guess = self._us_guess
             lmds_guess = self._lmds_guess
+            ss_guess = self._ss_guess
+            mus_guess = self._mus_guess
 
         # derivatives of functions
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
+        g, gx, gu, gxx, gux, guu = self._dg
 
         # success flag of solver
         is_success = False
@@ -156,13 +260,16 @@ class UCRRSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist, dyn_feas_hist,\
-            gamma_hist, alpha_hist = self._solve(
+        xs, us, lmds, ss, mus, ts, is_success,\
+            cost_hist, kkt_error_hist, dyn_feas_hist,\
+            gamma_hist, alpha_hist, epsilon_hist = self._solve(
                 f, fx, fu,
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+                g, gx, gu,
                 self._t0, self._x0, self._T, self._N, 
-                xs_guess, us_guess, lmds_guess,
+                xs_guess, us_guess, lmds_guess, ss_guess, mus_guess,
                 gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
+                self._epsilon_init, self._rho_epsilon, self._epsilon_tol,                
                 self._kkt_tol, max_iters
             )
 
@@ -175,6 +282,8 @@ class UCRRSolver(SolverBase):
         self._xs_opt = xs
         self._us_opt = us
         self._lmds_opt = lmds
+        self._ss_opt = ss
+        self._mus_opt = mus
         self._ts = ts
 
         self._result['is_success'] = is_success
@@ -185,9 +294,12 @@ class UCRRSolver(SolverBase):
         self._result['dyn_feas_hist'] = dyn_feas_hist
         self._result['gamma_hist'] = gamma_hist
         self._result['alpha_hist'] = alpha_hist
+        self._result['epsilon_hist'] = epsilon_hist
         self._result['xs_opt'] = xs
         self._result['us_opt'] = us
         self._result['lmds_opt'] = lmds
+        self._result['ss_opt'] = ss
+        self._result['mus_opt'] = mus
         self._result['ts'] = ts
 
         # results
@@ -206,24 +318,32 @@ class UCRRSolver(SolverBase):
     @numba.njit
     def _solve(f, fx, fu, 
                l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+               g, gx, gu,
                t0, x0, T, N,
-               xs, us, lmds,
-               gamma_init, rho_gamma, gamma_min, gamma_max,
-               alphas, kkt_tol, max_iters):
+               xs, us, lmds, ss, mus,
+               gamma_init, rho_gamma, gamma_min, gamma_max, alphas, 
+               epsilon_init, rho_epsiron, epsilon_tol,
+               kkt_tol, max_iters):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lmds, ts, is_success,
                   cost_hist, kkt_error_hist, dyn_feas_hist,
-                  gamma_hist, alpha_hist)
+                  gamma_hist, alpha_hist, epsilon_hist)
 
         """
         dt = T / N
         ts = np.array([t0 + i * dt for i in range(N + 1)])
+
         gamma = gamma_init
+        epsilon = epsilon_init
 
         # check initial KKT error and cost
-        kkt_error = eval_kkt_error(f, fx, fu, lx, lu, lfx, 
-                                   t0, x0, dt, xs, us, lmds)
+        kkt_error = eval_kkt_error(f, fx, fu,
+                                   lx, lu, lfx,
+                                   g, gx, gu,
+                                   t0, x0, dt,
+                                   xs, us, lmds, ss, mus,
+                                   epsilon)
         cost = eval_cost(l, lf, t0, dt, xs, us)
         dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
 
@@ -247,9 +367,17 @@ class UCRRSolver(SolverBase):
         alpha_hist = np.zeros(max_iters + 1, dtype=float)
         alpha_hist[0] = 0.0
 
+        # epsilon (barrier parameter) history
+        epsilon_hist = np.zeros(max_iters + 1, dtype=float)
+        epsilon_hist[0] = epsilon
+
+        # success flag
         is_success = False
 
         for iters in range(1, max_iters + 1):
+
+            # if epsilon <= epsilon_tol:
+            #     break
 
             if kkt_error < kkt_tol:
                 is_success = True
@@ -260,17 +388,27 @@ class UCRRSolver(SolverBase):
             kkt_blocks = compute_linearlized_kkt_blocks(
                 f, fx, fu,
                 lx, lu, lxx, lux, luu, lfx, lfxx,
+                g, gx, gu,
                 t0, dt,
-                xs, us, lmds
+                xs, us, lmds, ss, mus
             )
-            As, Bs = kkt_blocks[0:2]
-            Qxxs, Quxs, Quus = kkt_blocks[2:5]
-            x_bars, lx_bars, lu_bars = kkt_blocks[5:8]
+            As, Bs, Cs, Ds = kkt_blocks[0:4]
+            Qxxs, Quxs, Quus = kkt_blocks[4:7]
+            x_bars, g_bars, lx_bars, lu_bars = kkt_blocks[7:11]
+
+            # turn into unconstrained
+            Qxx_ecs, Qux_ecs, Quu_ecs, lx_ecs, lu_ecs = eliminate_constraints(
+                Qxxs, Quxs, Quus,
+                Cs, Ds,
+                g_bars, lx_bars, lu_bars,
+                ss, mus, epsilon
+            )
 
             # (2.34) - (2.35e)
             Ps, ps, Ks, ks = backward_recursion(
-                As, Bs, Qxxs, Quxs, Quus,
-                x_bars, lx_bars, lu_bars, gamma
+                As, Bs,
+                Qxx_ecs, Qux_ecs, Quu_ecs,
+                x_bars, lx_ecs, lu_ecs, gamma
             )
 
             # (2.26b), (2.36), (2.33)
@@ -279,19 +417,30 @@ class UCRRSolver(SolverBase):
                 Ps, ps, Ks, ks, 
                 As, Bs, x_bars
             )
+            # print('dxs', dxs)
+            # print('dus', dus)
+
+            dss, dmus = compute_constraints_steps(
+                Cs, Ds, g_bars, epsilon,
+                ss, mus,
+                dxs, dus
+            )
 
             # line search
-            xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha = line_search(
+            (xs_new, us_new, lmds_new, ss_new, mus_new, cost_new, kkt_error_new,
+             alpha, alpha_s_max, alpha_mu_max) = line_search(
                 f, fx, fu,
                 l, lx, lu, lf, lfx,
+                g, gx, gu,
                 t0, x0, dt,
-                xs, us, lmds,
-                dxs, dus, dlmds,
+                xs, us, lmds, ss, mus,
+                dxs, dus, dlmds, dss, dmus,
+                epsilon,
                 alphas, cost, kkt_error
             )
 
             # evaluate dynamics feasibility
-            dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
+            dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs_new, us_new)
 
             # modify regularization coefficient
             if kkt_error_new < kkt_error:
@@ -306,14 +455,18 @@ class UCRRSolver(SolverBase):
             xs = xs_new
             us = us_new
             lmds = lmds_new
+            ss = ss_new
+            mus = mus_new
             kkt_error = kkt_error_new
             cost = cost_new
 
+            # parameters' history
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
             dyn_feas_hist[iters] = dyn_feas
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
+            epsilon_hist[iters] = epsilon
         else:
             is_success = False
         
@@ -322,10 +475,11 @@ class UCRRSolver(SolverBase):
         dyn_feas_hist = dyn_feas_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
+        epsilon_hist = epsilon_hist[0: iters + 1]
 
-        return (xs, us, lmds, ts, is_success,
+        return (xs, us, lmds, ss, mus, ts, is_success,
                 cost_hist, kkt_error_hist, dyn_feas_hist,
-                gamma_hist, alpha_hist)
+                gamma_hist, alpha_hist, epsilon_hist)
 
     def print_result(self):
         """ Print summary of result.
@@ -380,29 +534,35 @@ class UCRRSolver(SolverBase):
 def compute_linearlized_kkt_blocks(
         f, fx, fu, lx, 
         lu, lxx, lux, luu, lfx, lfxx,
+        g, gx, gu,
         t0: float, dt: float,
-        xs: np.ndarray, us: np.ndarray, lmds: np.ndarray
+        xs: np.ndarray, us: np.ndarray, lmds: np.ndarray,
+        ss: np.ndarray, mus: np.ndarray
     ):
     """ Compute blocks of linealized kkt systems.
 
     Returns: 
-        tuple: (As, Bs,
+        tuple: (As, Bs, Cs, Ds,
                 Qxxs, Qxus, Quus,
-                x_bars, lx_bars, lu_bars)
+                x_bars, g_bars, lx_bars, lu_bars)
     """
     N = us.shape[0]
     n_x = xs.shape[1]
     n_u = us.shape[1]
+    n_g = ss.shape[1]
 
     # blocks of (2.26a) - (2.26g).
     As = np.empty((N, n_x, n_x))
     Bs = np.empty((N, n_x, n_u))
+    Cs = np.empty((N, n_g, n_x))
+    Ds = np.empty((N, n_g, n_u))
     Qxxs = np.empty((N + 1, n_x, n_x))
     Quxs = np.empty((N, n_u, n_x))
     Quus = np.empty((N, n_u, n_u))
     
     # LHS of (2.23c), (2.25b), (2.25c)
     x_bars = np.empty((N, n_x))
+    g_bars = np.empty((N, n_g))
     lx_bars = np.empty((N + 1, n_x))
     lu_bars = np.empty((N, n_u))
 
@@ -415,26 +575,102 @@ def compute_linearlized_kkt_blocks(
         x_1 = xs[i + 1]
         lmd_1 = lmds[i + 1]
 
+        # hamiltonian
+        Hx = lx(x, u, t) + lmd_1.T @ fx(x, u, t)
+        Hu = lu(x, u, t) + lmd_1.T @ fu(x, u, t)
+
+        # blocks
         As[i] = np.eye(n_x) + fx(x, u, t) * dt
         Bs[i] = fu(x, u, t) * dt
+        Cs[i] = gx(x, u, t)
+        Ds[i] = gu(x, u, t)
 
         Qxxs[i] = lxx(x, u, t) * dt
         Quxs[i] = lux(x, u, t) * dt
         Quus[i] = luu(x, u, t) * dt
 
         x_bars[i] = x + f(x, u, t) * dt - x_1
+        g_bars[i] = g(x, u, t) + ss[i]
 
-        lx_bars[i] = -lmd + lmd_1 + (lx(x, u, t) + lmd_1.T @ fx(x, u, t)) * dt
-        lu_bars[i] = (lu(x, u, t) + lmd_1.T @ fu(x, u, t)) * dt
+        lx_bars[i] = -lmd + lmd_1 + Hx * dt + gx(x, u, t).T @ mus[i]
+        lu_bars[i] = Hu * dt + gu(x, u, t).T @ mus[i]
 
     Qxxs[N] = lfxx(xs[N], t0 + N*dt)
     lx_bars[N] = lfx(xs[N], t0 + N*dt) - lmds[N]
 
-    kkt_blocks = (As, Bs,
+    kkt_blocks = (As, Bs, Cs, Ds,
                   Qxxs, Quxs, Quus,
-                  x_bars, lx_bars, lu_bars)
+                  x_bars, g_bars, lx_bars, lu_bars)
 
     return kkt_blocks
+
+
+@numba.njit
+def eliminate_constraints(
+        Qxxs: np.ndarray, Quxs: np.ndarray, Quus: np.ndarray,
+        Cs: np.ndarray, Ds: np.ndarray,
+        g_bars: np.ndarray, lx_bars: np.ndarray, lu_bars: np.ndarray,
+        ss: np.ndarray, mus: np.ndarray, epsilon: float
+    ):
+    """ Eliminating variables of inequality constraints and \
+        returns unconstrained blocks.
+    
+    Returns:
+        tuple: (Qxx_ecs, Qux_ecs, Quu_ecs
+                lx_ecs, lu_ecs)
+    """
+    N = Quxs.shape[0]
+    n_g = Cs.shape[1]
+
+    Qxx_ecs = Qxxs.copy()
+    Qux_ecs = Quxs.copy()
+    Quu_ecs = Quus.copy()
+    lx_ecs = lx_bars.copy()
+    lu_ecs = lu_bars.copy()
+
+    eps1 = epsilon * np.ones(n_g)
+
+    for i in range(N):
+        S_inv_Nu = np.diag(mus[i] / ss[i])
+        s_inv = np.reciprocal(ss[i])
+        # lxu_part = s_inv * (mus[i] * g_bars[i] - (mus[i] * ss[i] - eps1))
+        lxu_part = s_inv * mus[i] * g_bars[i] - mus[i] + s_inv * eps1
+
+        Qxx_ecs[i] += Cs[i].T @ S_inv_Nu @ Cs[i]
+        Qux_ecs[i] += Ds[i].T @ S_inv_Nu @ Cs[i]
+        Quu_ecs[i] += Ds[i].T @ S_inv_Nu @ Ds[i]
+        lx_ecs[i] += Cs[i].T @ lxu_part
+        lu_ecs[i] += Ds[i].T @ lxu_part
+    
+    return (Qxx_ecs, Qux_ecs, Quu_ecs, lx_ecs, lu_ecs)
+
+
+@numba.njit
+def compute_constraints_steps(
+        Cs, Ds,
+        g_bars, epsilon,
+        ss, mus,
+        dxs, dus,
+    ):
+    """ Compute newton steps of s and mu.
+
+    Returns:
+        (dss, dmus)
+    """
+    N = ss.shape[0]
+
+    dss = np.empty(ss.shape)
+    dmus = np.empty(mus.shape)
+
+    eps1 = epsilon * np.ones(ss.shape[1])
+
+    for i in range(N):
+        dss[i] = - (Cs[i] @ dxs[i] + Ds[i] @ dus[i] + g_bars[i])
+    
+    for i in range(N):
+        dmus[i] = - (mus[i] * (ss[i] + dss[i]) - eps1) / ss[i]
+    
+    return dss, dmus
 
 
 @numba.njit
@@ -510,9 +746,11 @@ def forward_recursion(
 @numba.njit
 def line_search(f, fx, fu, 
                 l, lx, lu, lf, lfx,
+                g, gx, gu,
                 t0, x0, dt,
-                xs, us, lmds,
-                dxs, dus, dlmds,
+                xs, us, lmds, ss, mus,
+                dxs, dus, dlmds, dss, dmus,
+                epsilon,
                 alphas, cost, kkt_error):
     """ Line search (multiple-shooting).
     
@@ -520,31 +758,73 @@ def line_search(f, fx, fu,
         tuple : (xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha)
     """
     N = us.shape[0]
+    n_g = ss.shape[1]
 
+    # updated variables
     xs_new = np.empty(xs.shape)
     us_new = np.empty(us.shape)
     lmds_new = np.empty(lmds.shape)
+    ss_new = np.empty(ss.shape)
+    mus_new = np.empty(mus.shape)
 
-    # backtracking line search (c1 = 0.0)
-    # todo: implement reasonable line search
+    # maximum alpha
+    alpha_s_max = 1.0
+    alpha_mu_max = 1.0
+
+    # margin of the fraction to the boundary rule
+    tau = 0.995
+
+    # fraction to the boundary rule
+    for i in range(N):
+
+        # s and mu at stage i
+        s = ss[i]
+        mu = mus[i]
+        ds = dss[i]
+        dmu = dmus[i]
+
+        for j in range(n_g):
+            if ds[j] < 0:
+                alpha_s_limit = - tau * s[j] / ds[j]
+                alpha_s_max = min(alpha_s_max, alpha_s_limit)
+            
+            if dmu[j] < 0:
+                alpha_mu_limit = - tau * mu[j] / dmu[j]
+                alpha_mu_max = min(alpha_mu_max, alpha_mu_limit)
+    
+    # line search
     for alpha in alphas:
 
-        for i in range(N):
-            us_new[i] = us[i] + alpha * dus[i]
-            xs_new[i] = xs[i] + alpha * dxs[i]
-            lmds_new[i] = lmds[i] + alpha * dlmds[i]
-        
-        xs_new[N] = xs[N] + alpha * dxs[N]
-        lmds_new[N] = lmds[N] + alpha * dlmds[N]
+        alpha *= alpha_s_max
 
-        kkt_error_new = eval_kkt_error(
-            f, fx, fu, lx, lu, lfx,
-            t0, x0, dt,
-            xs_new, us_new, lmds_new
-        )
+        # for i in range(N):
+        #     us_new[i] = us[i] + alpha * dus[i]
+        #     xs_new[i] = xs[i] + alpha * dxs[i]
+        #     lmds_new[i] = lmds[i] + alpha * dlmds[i]
+        #     ss_new[i] = ss[i] + alpha * dss[i]
+        #     mus_new[i] = mus[i] + alpha * dmus[i]
+
+        # xs_new[N] = xs[N] + alpha * dxs[N]
+        # lmds_new[N] = lmds[N] + alpha * dlmds[N]
+        
+        # new variables
+        xs_new = xs + alpha * dxs
+        us_new = us + alpha * dus
+        lmds_new = lmds + alpha * dlmds
+        ss_new = ss + alpha * dss
+        mus_new = mus + alpha_mu_max * dmus
 
         cost_new = eval_cost(
             l, lf, t0, dt, xs_new, us_new
+        )
+
+        kkt_error_new = eval_kkt_error(
+            f, fx, fu,
+            lx, lu, lfx,
+            g, gx, gu,
+            t0, x0, dt,
+            xs_new, us_new, lmds_new, ss_new, mus_new,
+            epsilon
         )
 
         if cost_new < cost:
@@ -553,7 +833,9 @@ def line_search(f, fx, fu,
         if (not np.isnan(cost_new)) and kkt_error_new < kkt_error:
             break
     
-    return xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha
+    return (xs_new, us_new, lmds_new, ss_new, mus_new,
+            cost_new, kkt_error_new,
+            alpha, alpha_s_max, alpha_mu_max)
 
 
 @numba.njit
@@ -576,38 +858,63 @@ def eval_cost(l, lf, t0, dt, xs, us):
 
 
 @numba.njit
-def eval_kkt_error(f, fx, fu, lx, lu, lfx,
+def eval_kkt_error(f, fx, fu, 
+                   lx, lu, lfx, 
+                   g, gx, gu,
                    t0, x0, dt,
-                   xs, us, lmds):
+                   xs, us, lmds, ss, mus,
+                   epsilon):
     """ Evaluate KKT error.
 
     Returns:
         kkt_error (float): Square root of KKT RSS (Residual Sum of Square).
     """
     N = us.shape[0]
+    n_g = ss.shape[1]
 
     kkt_error = 0.0
 
+    # initial state
     res = x0 - xs[0]
     kkt_error += np.sum(res ** 2)
 
+    eps1 = epsilon * np.ones(n_g)
+
     for i in range(N):
+        # variables at state i
         x = xs[i]
         u = us[i]
         lmd = lmds[i]
+        s = ss[i]
+        mu = mus[i]
         x1 = xs[i + 1]
         lmd1 = lmds[i + 1]
         t = t0 + i * dt
+        # gradient of hamiltonian
+        Hx = lx(x, u, t) + lmd1.T @ fx(x, u, t)
+        Hu = lu(x, u, t) + lmd1.T @ fu(x, u, t)
 
+        # dynamics
         res = x + f(x, u, t) * dt - x1
         kkt_error += np.sum(res ** 2)
 
-        res = -lmd + lmd1 + (lx(x, u, t) + lmd1.T @ fx(x, u, t)) * dt
+        # inequality constraints with slack variables.
+        res = g(x, u, t) + s
         kkt_error += np.sum(res ** 2)
 
-        res = (lu(x, u, t) + lmd1.T @ fu(x, u, t)) * dt
+        # Lx
+        res = -lmd + lmd1 + Hx * dt + gx(x, u, t).T @ mu
         kkt_error += np.sum(res ** 2)
 
+        # Lu
+        res = Hu * dt + gu(x, u, t).T @ mu
+        kkt_error += np.sum(res ** 2)
+
+        # complementary condition
+        res = mu * s - eps1
+        kkt_error += np.sum(res ** 2)
+
+    # Lx[N]
     res = lfx(xs[N], t0 + N * dt) - lmds[N]
     kkt_error += np.sum(res ** 2)
 
