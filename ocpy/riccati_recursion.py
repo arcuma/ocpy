@@ -108,8 +108,6 @@ class RiccatiRecursionSolver(SolverBase):
         self._lmds_guess = np.zeros((self._N + 1, self._n_x))
         self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
         self._mus_guess = self.generate_mus(self._ss_guess, self._epsilon_init)
-        # self._ss_guess = np.ones((self._N, self._n_g))
-        # self._mus_guess = self._epsilon_init * np.ones((self._N, self._n_g))
     
     def generate_ss(self, xs: np.ndarray, us: np.ndarray):
         """ Reset trajectory of slack variables of inequality constraints.
@@ -417,8 +415,6 @@ class RiccatiRecursionSolver(SolverBase):
                 Ps, ps, Ks, ks, 
                 As, Bs, x_bars
             )
-            # print('dxs', dxs)
-            # print('dus', dus)
 
             dss, dmus = compute_constraints_steps(
                 Cs, Ds, g_bars, epsilon,
@@ -755,7 +751,9 @@ def line_search(f, fx, fu,
     """ Line search (multiple-shooting).
     
     Returns:
-        tuple : (xs_new, us_new, lmds_new, cost_new, kkt_error_new, alpha)
+        tuple : (xs_new, us_new, lmds_new, ss_new, mus_new,
+                 cost_new, kkt_error_new, alpha,
+                 alpha, alpha_s_max, alpha_mu_max)
     """
     N = us.shape[0]
     n_g = ss.shape[1]
@@ -810,7 +808,7 @@ def line_search(f, fx, fu,
         # new variables
         xs_new = xs + alpha * dxs
         us_new = us + alpha * dus
-        lmds_new = lmds + alpha * dlmds
+        lmds_new = lmds + alpha_mu_max * dlmds
         ss_new = ss + alpha * dss
         mus_new = mus + alpha_mu_max * dmus
 
