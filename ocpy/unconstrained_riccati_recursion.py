@@ -35,7 +35,7 @@ class UCRRSolver(SolverBase):
 
         self._result['cost_hist'] = None
         self._result['kkt_error_hist'] = None
-        self._result['dyn_feas_hist'] = None
+        self._result['dyn_error_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
@@ -156,7 +156,7 @@ class UCRRSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist, dyn_feas_hist,\
+        xs, us, lmds, ts, is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
             gamma_hist, alpha_hist = self._solve(
                 f, fx, fu,
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
@@ -182,7 +182,7 @@ class UCRRSolver(SolverBase):
         self._result['computation_time'] = computation_time
         self._result['cost_hist'] = cost_hist
         self._result['kkt_error_hist'] = kkt_error_hist
-        self._result['dyn_feas_hist'] = dyn_feas_hist
+        self._result['dyn_error_hist'] = dyn_error_hist
         self._result['gamma_hist'] = gamma_hist
         self._result['alpha_hist'] = alpha_hist
         self._result['xs_opt'] = xs
@@ -213,7 +213,7 @@ class UCRRSolver(SolverBase):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lmds, ts, is_success,
-                  cost_hist, kkt_error_hist, dyn_feas_hist,
+                  cost_hist, kkt_error_hist, dyn_error_hist,
                   gamma_hist, alpha_hist)
 
         """
@@ -225,7 +225,7 @@ class UCRRSolver(SolverBase):
         kkt_error = eval_kkt_error(f, fx, fu, lx, lu, lfx, 
                                    t0, x0, dt, xs, us, lmds)
         cost = eval_cost(l, lf, t0, dt, xs, us)
-        dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
+        dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
         # cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
@@ -236,8 +236,8 @@ class UCRRSolver(SolverBase):
         kkt_error_hist[0] = kkt_error
 
         # dynamics feasibility history
-        dyn_feas_hist = np.zeros(max_iters + 1, dtype=float)
-        dyn_feas_hist[0] = dyn_feas
+        dyn_error_hist = np.zeros(max_iters + 1, dtype=float)
+        dyn_error_hist[0] = dyn_error
 
         # gamma history
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
@@ -256,7 +256,7 @@ class UCRRSolver(SolverBase):
                 iters -= 1
                 break
 
-            # (2.26a) - (2.26g)
+            # compute blocks of pertubed KKT system
             kkt_blocks = compute_linearlized_kkt_blocks(
                 f, fx, fu,
                 lx, lu, lxx, lux, luu, lfx, lfxx,
@@ -267,13 +267,13 @@ class UCRRSolver(SolverBase):
             Qxxs, Quxs, Quus = kkt_blocks[2:5]
             x_bars, lx_bars, lu_bars = kkt_blocks[5:8]
 
-            # (2.34) - (2.35e)
+            # backward recursion
             Ps, ps, Ks, ks = backward_recursion(
                 As, Bs, Qxxs, Quxs, Quus,
                 x_bars, lx_bars, lu_bars, gamma
             )
 
-            # (2.26b), (2.36), (2.33)
+            # forward recursion
             dxs, dus, dlmds = forward_recursion(
                 x0, xs[0], 
                 Ps, ps, Ks, ks, 
@@ -291,7 +291,7 @@ class UCRRSolver(SolverBase):
             )
 
             # evaluate dynamics feasibility
-            dyn_feas = eval_dynamics_feasibility(f, t0, x0, dt, xs, us)
+            dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
             # modify regularization coefficient
             if kkt_error_new < kkt_error:
@@ -311,7 +311,7 @@ class UCRRSolver(SolverBase):
 
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
-            dyn_feas_hist[iters] = dyn_feas
+            dyn_error_hist[iters] = dyn_error
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
         else:
@@ -319,12 +319,12 @@ class UCRRSolver(SolverBase):
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
-        dyn_feas_hist = dyn_feas_hist[0: iters + 1]
+        dyn_error_hist = dyn_error_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
 
         return (xs, us, lmds, ts, is_success,
-                cost_hist, kkt_error_hist, dyn_feas_hist,
+                cost_hist, kkt_error_hist, dyn_error_hist,
                 gamma_hist, alpha_hist)
 
     def print_result(self):
@@ -394,14 +394,14 @@ def compute_linearlized_kkt_blocks(
     n_x = xs.shape[1]
     n_u = us.shape[1]
 
-    # blocks of (2.26a) - (2.26g).
+    # LHS
     As = np.empty((N, n_x, n_x))
     Bs = np.empty((N, n_x, n_u))
     Qxxs = np.empty((N + 1, n_x, n_x))
     Quxs = np.empty((N, n_u, n_x))
     Quus = np.empty((N, n_u, n_u))
     
-    # LHS of (2.23c), (2.25b), (2.25c)
+    # RHS
     x_bars = np.empty((N, n_x))
     lx_bars = np.empty((N + 1, n_x))
     lu_bars = np.empty((N, n_u))
@@ -615,7 +615,7 @@ def eval_kkt_error(f, fx, fu, lx, lu, lfx,
 
 
 @numba.njit
-def eval_dynamics_feasibility(f, t0, x0, dt, xs, us):
+def eval_dynamics_error(f, t0, x0, dt, xs, us):
     """ Evaluate feasibility of dynamics.
 
     Returns:
