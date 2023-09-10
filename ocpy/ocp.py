@@ -706,9 +706,9 @@ class OCP:
         f = cartpole_ocp.get_zero_vector(n_x)
         f[0] = x[2]
         f[1] = x[3]
-        f[2] = (u[0] + m_p*sin(x[1])*(l*x[1]*x[1] + g*cos(x[1]))) \
+        f[2] = (u[0] + m_p*sin(x[1])*(l*x[3]*x[3] + g*cos(x[1]))) \
                 /( m_c+m_p*sin(x[1])*sin(x[1]))
-        f[3] = (-u[0] * cos(x[1]) - m_p*l*x[1]*x[1]*cos(x[1])*sin(x[1]) 
+        f[3] = (-u[0] * cos(x[1]) - m_p*l*x[3]*x[3]*cos(x[1])*sin(x[1]) 
                 - (m_c+m_p)*g*sin(x[1])) / ( l*(m_c + m_p*sin(x[1])*sin(x[1])))
         # barrier function for inequality constraints.
         u_barrier = sym.Matrix([

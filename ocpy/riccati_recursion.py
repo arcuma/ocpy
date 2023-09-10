@@ -389,6 +389,8 @@ class RiccatiRecursionSolver(SolverBase):
             # if epsilon <= epsilon_tol:
             #     break
 
+            # print(f'iters: {iters}')
+
             if kkt_error < kkt_tol:
                 is_success = True
                 iters -= 1
@@ -804,7 +806,7 @@ def line_search(f, fx, fu,
     N = us.shape[0]
     n_g = ss.shape[1]
 
-    c_armijo = 1e-5
+    c_armijo = 1e-4
 
     # updated variables
     xs_new = np.empty(xs.shape)
@@ -826,6 +828,7 @@ def line_search(f, fx, fu,
         t0, x0, dt, xs, us, lmds, ss, mus, dxs, dus, dlmds, dss, dmus,
         epsilon, r_merit
     )
+    # print(deriv_merit)
 
     # fraction to the boundary rule
     for i in range(N):
@@ -863,8 +866,8 @@ def line_search(f, fx, fu,
                                xs_new, us_new, lmds_new, ss_new, mus_new,
                                epsilon, r_merit)
         
-        # print(merit, deriv_merit, r_merit, merit + c_armijo * deriv_merit , merit_new)
-        # print(merit_new < merit + c_armijo * deriv_merit)
+        # print(merit, deriv_merit, r_merit, merit + c_armijo * alpha * deriv_merit , merit_new)
+        # print(merit_new < merit + c_armijo * alpha * deriv_merit)
         # print()
         
         cost_new = eval_cost(
@@ -933,9 +936,18 @@ def eval_kkt_error(f, fx, fu,
 
     kkt_error = 0.0
 
+    dyn_error = 0.0
+    ineq_error = 0.0
+    Lx_error = 0.0
+    Lu_error = 0.0
+    cmpl_error = 0.0
+
+    nabra_l = 0.0
+    Lx_inf = 0.0
+
     # initial state
     res = x0 - xs[0]
-    kkt_error += np.sum(np.abs(res) ** ord)
+    dyn_error += np.sum(np.abs(res) ** ord)
 
     eps1 = epsilon * np.ones(n_g)
 
@@ -955,28 +967,41 @@ def eval_kkt_error(f, fx, fu,
 
         # dynamics
         res = x + f(x, u, t) * dt - x1
-        kkt_error += np.sum(np.abs(res) ** ord)
+        dyn_error += np.sum(np.abs(res) ** ord)
 
         # inequality constraints with slack variables.
         res = g(x, u, t) + s
-        kkt_error += np.sum(np.abs(res) ** ord)
+        ineq_error += np.sum(np.abs(res) ** ord)
 
         # Lx
         res = -lmd + lmd1 + Hx * dt + gx(x, u, t).T @ mu
-        kkt_error += np.sum(np.abs(res) ** ord)
+        Lx_error += np.sum(np.abs(res) ** ord)
+        Lx_inf = max(Lx_inf, np.max(np.abs(res)))
+        nabra_l = max(nabra_l, np.max(np.abs(lx(x, u, t) * dt)))
+        # print('nabra_l', nabra_l)
 
         # Lu
         res = Hu * dt + gu(x, u, t).T @ mu
-        kkt_error += np.sum(np.abs(res) ** ord)
+        Lu_error += np.sum(np.abs(res) ** ord)
 
         # complementary condition
         res = mu * s - eps1
-        kkt_error += np.sum(np.abs(res) ** ord)
-
+        cmpl_error += np.sum(np.abs(res) ** ord)
 
     # Lx[N]
     res = lfx(xs[N], t0 + N * dt) - lmds[N]
-    kkt_error += np.sum(np.abs(res) ** ord)
+    Lx_error += np.sum(np.abs(res) ** ord)
+    Lx_inf = max(Lx_inf, np.max(np.abs(res)))
+
+    nabra_l = max(nabra_l, np.max(np.abs(lfx(x, t))))
+
+
+    kkt_error = dyn_error + ineq_error + Lx_error + Lu_error + cmpl_error
+
+    # print('dyn, ineq, Lx, Lu, cmpl')
+    # print(dyn_error, ineq_error, Lx_error, Lu_error, cmpl_error)
+    # print(Lx_error, Lx_inf , nabra_l)
+    # print()
 
     return kkt_error ** (1.0 / ord)
   
@@ -1093,6 +1118,8 @@ def eval_merit(
         merit_constr += np.linalg.norm(g(x, u, t) + s, ord=1)
     
     merit_cost += lf(xs[N], t0 + N + dt)
+
+    # print(merit_cost, merit_constr)
 
     # merit function value
     merit = merit_cost + r_merit * merit_constr
