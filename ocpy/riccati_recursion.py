@@ -85,22 +85,31 @@ class RiccatiRecursionSolver(SolverBase):
             xs_guess = np.asarray(xs_guess, dtype=float)
             assert xs_guess.shape == (self._N + 1, self._n_x)
             self._xs_guess = xs_guess
+
         if us_guess is not None:
             us_guess = np.asarray(us_guess, dtype=float)
             assert us_guess.shape == (self._N, self._n_u)
             self._us_guess = us_guess
+
         if lmds_guess is not None:
             lmds_guess = np.asarray(lmds_guess, dtype=float)
             assert lmds_guess.shape == (self._N + 1, self._n_x)
             self._lmds_guess = lmds_guess
-        if ss_guess is not None:
+
+        if ss_guess is None:
+            self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
+        else:
             ss_guess = np.asarray(ss_guess, dtype=float)
             assert ss_guess.shape == (self._N, self._n_g)
             self._ss_guess = ss_guess
-        if mus_guess is not None:
+
+        if mus_guess is None:
+            self._mus_guess = self.generate_mus(self._ss_guess, self._epsilon_init)
+        else:
             mus_guess = np.asarray(mus_guess, dtype=float)
             assert mus_guess.shape == (self._N, self._n_g)
             self._mus_guess = mus_guess
+
 
     def reset_guess(self):
         """ Reset guess to zero.
