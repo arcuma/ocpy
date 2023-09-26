@@ -33,10 +33,10 @@ class RiccatiRecursionSolver(SolverBase):
             self._has_ineq_constr = True
         self._dg = ocp.get_dg()
 
-        self._epsilon_init = 1e-2
-        self._rho_epsilon = 0.1
-        self._epsilon_tol = 1e-4
-        self._update_epsilon = True
+        self._mu_init = 1e-2
+        self._rho_mu = 0.1
+        self._mu_tol = 1e-4
+        self._update_mu = True
 
         self._kkt_tol = 1e-4
 
@@ -44,7 +44,7 @@ class RiccatiRecursionSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
         self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
-        self._lamss_guess = self.generate_lamss(self._ss_guess, self._epsilon_init)
+        self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
 
         self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
         self._ss_opt = np.ones((self._N, self._n_g))
@@ -55,7 +55,7 @@ class RiccatiRecursionSolver(SolverBase):
         self._result['dyn_error_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
-        self._result['epsilon_hist'] = None
+        self._result['mu_hist'] = None
         self._result['r_merit_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
@@ -104,12 +104,11 @@ class RiccatiRecursionSolver(SolverBase):
             self._ss_guess = ss_guess
 
         if lamss_guess is None:
-            self._lamss_guess = self.generate_lamss(self._ss_guess, self._epsilon_init)
+            self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
         else:
             lamss_guess = np.asarray(lamss_guess, dtype=float)
             assert lamss_guess.shape == (self._N, self._n_g)
             self._lamss_guess = lamss_guess
-
 
     def reset_guess(self):
         """ Reset guess to zero.
@@ -118,7 +117,7 @@ class RiccatiRecursionSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
         self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
-        self._lamss_guess = self.generate_lamss(self._ss_guess, self._epsilon_init)
+        self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
     
     def generate_ss(self, xs: np.ndarray, us: np.ndarray):
         """ Reset trajectory of slack variables of inequality constraints.
@@ -146,7 +145,7 @@ class RiccatiRecursionSolver(SolverBase):
 
         return ss
 
-    def generate_lamss(self, ss: np.ndarray, epsilon: float):
+    def generate_lamss(self, ss: np.ndarray, mu: float):
         """ Reset trajectory of lagrange variables of inequality constraints.
 
         Args:
@@ -161,7 +160,7 @@ class RiccatiRecursionSolver(SolverBase):
             print('OCP does not have inequality constraint.')
             return np.ones((self._N, self._n_g))
 
-        lamss = epsilon * np.reciprocal(ss)
+        lamss = mu * np.reciprocal(ss)
 
         return lamss
 
@@ -169,28 +168,28 @@ class RiccatiRecursionSolver(SolverBase):
         """ Set KKT error tolerance. 
 
         Args:
-            kkt_tol (float): Threshold of KKT error at each epsilon.
+            kkt_tol (float): Threshold of KKT error at each mu.
         """
         if kkt_tol is not None:
             assert kkt_tol > 0
             self._kkt_tol = kkt_tol
     
-    def set_epsilon(
-            self, epsilon_init: float=None, rho_epsilon: float=None,
-            epsilon_tol: float=None):
+    def set_barrier_param(
+            self, mu_init: float=None, rho_mu: float=None,
+            mu_tol: float=None):
         """ Set parameters related to barrier function.
 
         Args:
-            epsilon_init (float): Initial value of barrier coefficient.
-            rho_epsilon (float): Update rate of barrier coefficient.
-            epsilon_tol (float): Stop tolerance of barrier coefficient.
+            mu_init (float): Initial value of barrier coefficient.
+            rho_mu (float): Update rate of barrier coefficient.
+            mu_tol (float): Stop tolerance of barrier coefficient.
         """
-        if epsilon_init is not None:
-            self._epsilon_init = epsilon_init
-        if rho_epsilon is not None:
-            self._rho_epsilon = rho_epsilon
-        if epsilon_tol is not None:
-            self._epsilon_tol = epsilon_tol
+        if mu_init is not None:
+            self._mu_init = mu_init
+        if rho_mu is not None:
+            self._rho_mu = rho_mu
+        if mu_tol is not None:
+            self._mu_tol = mu_tol
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
@@ -206,8 +205,8 @@ class RiccatiRecursionSolver(SolverBase):
 
     def solve(
             self,
-            gamma_fixed: float=None, enable_line_search: bool=True,
-            update_epsilon: bool=True,
+            gamma_fixed: float=None, enable_line_search: bool=False,
+            update_mu: bool=True,
             max_iters: int=None, warm_start :bool=False,
             result=False, log=False, plot=False
         ):
@@ -216,7 +215,7 @@ class RiccatiRecursionSolver(SolverBase):
         Args:
             gamma_fixed (float): If set, regularization coefficient is fixed.
             enable_line_search (bool=True): If true, enable line searching.
-            update_epsilon (bool=True): If True, barrier parameter is updated \
+            update_mu (bool=True): If True, barrier parameter is updated \
                 while iteration.
             max_iters (int): Number of max iterations.
             warm_start (bool=False): If true, previous solution is used \
@@ -233,17 +232,19 @@ class RiccatiRecursionSolver(SolverBase):
         """
         if gamma_fixed is None:
             gamma_init = self._gamma_init
-            rho_gamma = self._rho_gamma
+            r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
-            rho_gamma = 1.0
+            r_gamma = 1.0
 
         if enable_line_search:
-            alphas = self._alphas
+            alpha_min = self._alpha_min
+            r_alpha = self._r_alpha
         else:
-            alphas = np.array([1.0])
+            alpha_min = 1.0
+            r_alpha = self._r_alpha
 
         if max_iters is None:
             max_iters = self._max_iters
@@ -274,15 +275,15 @@ class RiccatiRecursionSolver(SolverBase):
         # solve
         xs, us, lamxs, ss, lamss, ts, is_success,\
         cost_hist, kkt_error_hist, dyn_error_hist,\
-        gamma_hist, alpha_hist, epsilon_hist, r_merit_hist = self._solve(
+        gamma_hist, alpha_hist, mu_hist, r_merit_hist = self._solve(
                 f, fx, fu,
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
                 g, gx, gu,
                 self._t0, self._x0, self._T, self._N, 
                 xs_guess, us_guess, lamxs_guess, ss_guess, lamss_guess,
-                gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
-                self._epsilon_init, self._rho_epsilon, self._epsilon_tol,
-                update_epsilon,
+                gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
+                self._mu_init, self._rho_mu, self._mu_tol,
+                update_mu,
                 self._kkt_tol, max_iters
         )
 
@@ -307,7 +308,7 @@ class RiccatiRecursionSolver(SolverBase):
         self._result['dyn_error_hist'] = dyn_error_hist
         self._result['gamma_hist'] = gamma_hist
         self._result['alpha_hist'] = alpha_hist
-        self._result['epsilon_hist'] = epsilon_hist
+        self._result['mu_hist'] = mu_hist
         self._result['r_merit_hist'] = r_merit_hist
         self._result['xs_opt'] = xs
         self._result['us_opt'] = us
@@ -335,27 +336,27 @@ class RiccatiRecursionSolver(SolverBase):
                g, gx, gu,
                t0, x0, T, N,
                xs, us, lamxs, ss, lamss,
-               gamma_init, rho_gamma, gamma_min, gamma_max, alphas, 
-               epsilon_init, rho_epsiron, epsilon_tol, update_epsilon,
+               gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha, 
+               mu_init, rho_mu, mu_tol, update_mu,
                kkt_tol, max_iters):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lamxs, ts, is_success,
                   cost_hist, kkt_error_hist, dyn_error_hist,
-                  gamma_hist, alpha_hist, epsilon_hist)
+                  gamma_hist, alpha_hist, mu_hist)
 
         """
         dt = T / N
         ts = np.array([t0 + i * dt for i in range(N + 1)])
 
         gamma = gamma_init
-        epsilon = epsilon_init
+        mu = mu_init
         r_merit = 1.0
 
         # check initial KKT error and cost
         kkt_error = eval_kkt_error(
             f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
-            xs, us, lamxs, ss, lamss, epsilon
+            xs, us, lamxs, ss, lamss, mu
         )
         cost = eval_cost(l, lf, t0, dt, xs, us)
         dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
@@ -380,9 +381,9 @@ class RiccatiRecursionSolver(SolverBase):
         alpha_hist = np.zeros(max_iters + 1, dtype=float)
         alpha_hist[0] = 0.0
 
-        # epsilon (barrier parameter) history
-        epsilon_hist = np.zeros(max_iters + 1, dtype=float)
-        epsilon_hist[0] = epsilon
+        # mu (barrier parameter) history
+        mu_hist = np.zeros(max_iters + 1, dtype=float)
+        mu_hist[0] = mu
 
         # penalty coefficient of constraints violation in merit function
         r_merit_hist = np.zeros(max_iters + 1, dtype=float)
@@ -393,7 +394,7 @@ class RiccatiRecursionSolver(SolverBase):
 
         for iters in range(1, max_iters + 1):
 
-            # if epsilon <= epsilon_tol:
+            # if mu <= mu_tol:
             #     break
 
             if kkt_error < kkt_tol:
@@ -413,7 +414,7 @@ class RiccatiRecursionSolver(SolverBase):
             # turn into unconstrained
             Qxx_ecs, Qux_ecs, Quu_ecs, lx_ecs, lu_ecs = eliminate_constraints(
                 Qxxs, Quxs, Quus, Cs, Ds, g_bars, lx_bars, lu_bars,
-                ss, lamss, epsilon
+                ss, lamss, mu
             )
 
             # backward recursion 
@@ -427,18 +428,18 @@ class RiccatiRecursionSolver(SolverBase):
             )
 
             # get newton step of slack variables and lagrange variables
-            dss, dlamss = compute_constraints_steps(
-                Cs, Ds, g_bars, epsilon,
+            dss, dlamss = compute_slack_step(
+                Cs, Ds, g_bars, mu,
                 ss, lamss,
                 dxs, dus
             )
 
             # line search
             xs, us, lamxs, ss, lamss, cost_new, kkt_error_new, \
-            alpha, alpha_s_max, alpha_mu_max, r_merit_new = line_search(
+            alpha, alpha_dual, r_merit_new = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt,
                     xs, us, lamxs, ss, lamss, dxs, dus, dlamxs, dss, dlamss,
-                    epsilon, alphas, cost, kkt_error, r_merit
+                    mu, alpha_min, r_alpha, cost, kkt_error, r_merit
             )
 
             # evaluate dynamics feasibility
@@ -446,9 +447,9 @@ class RiccatiRecursionSolver(SolverBase):
 
             # modify regularization coefficient
             if kkt_error_new < kkt_error:
-                gamma /= rho_gamma
+                gamma /= r_gamma
             else:
-                gamma *= rho_gamma
+                gamma *= r_gamma
 
             # clip gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
@@ -458,16 +459,13 @@ class RiccatiRecursionSolver(SolverBase):
             cost = cost_new
             r_merit = r_merit_new
 
-            if update_epsilon:
-                epsilon = compute_new_epsilon(ss, lamss)
-
             # parameters' history
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
             dyn_error_hist[iters] = dyn_error
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
-            epsilon_hist[iters] = epsilon
+            mu_hist[iters] = mu
             r_merit_hist[iters] = r_merit
         else:
             is_success = False
@@ -477,12 +475,12 @@ class RiccatiRecursionSolver(SolverBase):
         dyn_error_hist = dyn_error_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
-        epsilon_hist = epsilon_hist[0: iters + 1]
+        mu_hist = mu_hist[0: iters + 1]
         r_merit_hist = r_merit_hist[0: iters + 1]
 
         return (xs, us, lamxs, ss, lamss, ts, is_success,
                 cost_hist, kkt_error_hist, dyn_error_hist,
-                gamma_hist, alpha_hist, epsilon_hist, r_merit_hist)
+                gamma_hist, alpha_hist, mu_hist, r_merit_hist)
 
     def print_result(self):
         """ Print summary of result.
@@ -534,7 +532,7 @@ class RiccatiRecursionSolver(SolverBase):
 
 
 @numba.njit
-def compute_new_epsilon(
+def compute_new_mu(
         ss: np.ndarray, lamss: np.ndarray
     ):
     """ Compute new barrier parameter. Duality measure is used.
@@ -544,7 +542,7 @@ def compute_new_epsilon(
         lamss (np.ndarray): Trajectory of Lagrange variables of inequality
 
     Returns:
-        epsilon_new (float):
+        mu_new (float):
     """
     N = ss.shape[0]
     n_g = ss.shape[1]
@@ -558,11 +556,11 @@ def compute_new_epsilon(
         ss_lamss += ss[i].T @ lamss[i]
     
     # duality measure
-    epsilon_new = ss_lamss / (N * n_g)
+    mu_new = ss_lamss / (N * n_g)
 
-    epsilon_new *= sigma
+    mu_new *= sigma
 
-    return epsilon_new
+    return mu_new
 
 
 @numba.njit
@@ -647,7 +645,7 @@ def eliminate_constraints(
         Qxxs: np.ndarray, Quxs: np.ndarray, Quus: np.ndarray,
         Cs: np.ndarray, Ds: np.ndarray,
         g_bars: np.ndarray, lx_bars: np.ndarray, lu_bars: np.ndarray,
-        ss: np.ndarray, lamss: np.ndarray, epsilon: float
+        ss: np.ndarray, lamss: np.ndarray, mu: float
     ):
     """ Eliminating variables of inequality constraints and \
         returns unconstrained blocks.
@@ -665,13 +663,13 @@ def eliminate_constraints(
     lx_ecs = lx_bars.copy()
     lu_ecs = lu_bars.copy()
 
-    eps1 = epsilon * np.ones(n_g)
+    mu1 = mu * np.ones(n_g)
 
     for i in range(N):
         S_inv_Nu = np.diag(lamss[i] / ss[i])
         s_inv = np.reciprocal(ss[i])
-        # lxu_part = s_inv * (lamss[i] * g_bars[i] - (lamss[i] * ss[i] - eps1))
-        lxu_part = s_inv * lamss[i] * g_bars[i] - lamss[i] + s_inv * eps1
+        # lxu_part = s_inv * (lamss[i] * g_bars[i] - (lamss[i] * ss[i] - mu1))
+        lxu_part = s_inv * lamss[i] * g_bars[i] - lamss[i] + s_inv * mu1
 
         Qxx_ecs[i] += Cs[i].T @ S_inv_Nu @ Cs[i]
         Qux_ecs[i] += Ds[i].T @ S_inv_Nu @ Cs[i]
@@ -683,13 +681,13 @@ def eliminate_constraints(
 
 
 @numba.njit
-def compute_constraints_steps(
+def compute_slack_step(
         Cs, Ds,
-        g_bars, epsilon,
+        g_bars, mu,
         ss, lamss,
         dxs, dus,
     ):
-    """ Compute newton steps of s and mu.
+    """ Compute newton step of s and lams.
 
     Returns:
         (dss, dlamss)
@@ -699,13 +697,13 @@ def compute_constraints_steps(
     dss = np.empty(ss.shape)
     dlamss = np.empty(lamss.shape)
 
-    eps1 = epsilon * np.ones(ss.shape[1])
+    mu1 = mu * np.ones(ss.shape[1])
 
     for i in range(N):
         dss[i] = - (Cs[i] @ dxs[i] + Ds[i] @ dus[i] + g_bars[i])
     
     for i in range(N):
-        dlamss[i] = - (lamss[i] * (ss[i] + dss[i]) - eps1) / ss[i]
+        dlamss[i] = - (lamss[i] * (ss[i] + dss[i]) - mu1) / ss[i]
     
     return dss, dlamss
 
@@ -783,14 +781,14 @@ def forward_recursion(
 def line_search(
         f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt, 
         xs, us, lamxs, ss, lamss, dxs, dus, dlamxs, dss, dlamss,
-        epsilon, alphas, cost, kkt_error, r_merit
+        mu, alpha_min, r_alpha, cost, kkt_error, r_merit
     ):
     """ Line search (multiple-shooting).
     
     Returns:
         tuple : (xs_new, us_new, lamxs_new, ss_new, lamss_new,
                  cost_new, kkt_error_new, alpha,
-                 alpha, alpha_s_max, alpha_mu_max)
+                 alpha, alpha_s_max, alpha_lams_max)
     """
     N = us.shape[0]
     n_g = ss.shape[1]
@@ -806,7 +804,7 @@ def line_search(
 
     # maximum alpha
     alpha_s_max = 1.0
-    alpha_mu_max = 1.0
+    alpha_lams_max = 1.0
 
     # margin of the fraction to the boundary rule
     tau = 0.995
@@ -814,42 +812,42 @@ def line_search(
     # merit value at nominal state
     merit, deriv_merit, r_merit = eval_merit_and_derivative(
         f, l, lx, lu, lf, lfx, g, t0, x0, dt, 
-        xs, us, ss, dxs, dus, dss, epsilon, r_merit
+        xs, us, ss, dxs, dus, dss, mu, r_merit
     )
  
     # fraction to the boundary rule
     for i in range(N):
 
-        # s and mu at stage i
+        # s and lams at stage i
         s = ss[i]
-        mu = lamss[i]
+        lams = lamss[i]
         ds = dss[i]
-        dmu = dlamss[i]
+        dlams = dlamss[i]
 
         for j in range(n_g):
             if ds[j] < 0:
                 alpha_s_limit = - tau * s[j] / ds[j]
                 alpha_s_max = min(alpha_s_max, alpha_s_limit)
             
-            if dmu[j] < 0:
-                alpha_mu_limit = - tau * mu[j] / dmu[j]
-                alpha_mu_max = min(alpha_mu_max, alpha_mu_limit)
+            if dlams[j] < 0:
+                alpha_lams_limit = - tau * lams[j] / dlams[j]
+                alpha_lams_max = min(alpha_lams_max, alpha_lams_limit)
     
+    alpha_primal = alpha_s_max
+    alpha_dual = alpha_lams_max
+
     # backtracking line search
-    for alpha in alphas:
-
-        alpha *= alpha_s_max
-
+    while True:
         # new variables
-        xs_new = xs + alpha * dxs
-        us_new = us + alpha * dus
-        lamxs_new = lamxs + alpha_mu_max * dlamxs
-        ss_new = ss + alpha * dss
-        lamss_new = lamss + alpha_mu_max * dlamss
+        xs_new = xs + alpha_primal * dxs
+        us_new = us + alpha_primal * dus
+        lamxs_new = lamxs + alpha_dual * dlamxs
+        ss_new = ss + alpha_primal * dss
+        lamss_new = lamss + alpha_dual * dlamss
 
         # evaluate merit function
         merit_new = eval_merit(
-            f, l, lf, g, t0, x0, dt, xs_new, us_new, ss_new, epsilon, r_merit
+            f, l, lf, g, t0, x0, dt, xs_new, us_new, ss_new, mu, r_merit
         )
         
         # evaluate new cost
@@ -860,26 +858,32 @@ def line_search(
         # evaluate new KKT error
         kkt_error_new = eval_kkt_error(
             f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
-            xs_new, us_new, lamxs_new, ss_new, lamss_new, epsilon
+            xs_new, us_new, lamxs_new, ss_new, lamss_new, mu
         )
 
-        if merit_new < merit + c_armijo * alpha * deriv_merit:
+        # stop condition
+        if merit_new < merit + c_armijo * alpha_primal * deriv_merit:
             break
-
         if cost_new < cost:
             break
-
         if (not np.isnan(cost_new)) and kkt_error_new < kkt_error:
             break
 
+        # reached minimum alpha
+        if alpha_primal < alpha_min:
+            break
+
+        # update alpha
+        alpha_primal *= r_alpha
+
     return (xs_new, us_new, lamxs_new, ss_new, lamss_new,
             cost_new, kkt_error_new,
-            alpha, alpha_s_max, alpha_mu_max, r_merit)
+            alpha_primal, alpha_dual, r_merit)
 
 @numba.njit
 def eval_merit_and_derivative(
         f, l, lx, lu, lf, lfx, g, t0, x0, dt,
-        xs, us, ss, dxs, dus, dss, epsilon, r_merit
+        xs, us, ss, dxs, dus, dss, mu, r_merit
     ):
     """ Evaluate merit function and its directional derivatives of metit function.
 
@@ -913,7 +917,7 @@ def eval_merit_and_derivative(
 
         # cost
         merit_cost += l(x, u, t) * dt
-        merit_cost += -epsilon * np.log(ss[i]).sum()
+        merit_cost += -mu * np.log(ss[i]).sum()
 
         # constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
@@ -922,7 +926,7 @@ def eval_merit_and_derivative(
         # cost deriv
         deriv_merit_cost += lx(x, u, t) * dt @ dx
         deriv_merit_cost += lu(x, u, t) * dt @ du
-        deriv_merit_cost += -epsilon * (1.0/s) @ ds
+        deriv_merit_cost += -mu * (1.0/s) @ ds
 
         # constraint deriv
         deriv_merit_constr += -np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
@@ -945,7 +949,7 @@ def eval_merit_and_derivative(
 
 @numba.njit
 def eval_merit(
-        f, l, lf, g, t0, x0, dt, xs, us, ss, epsilon, r_merit
+        f, l, lf, g, t0, x0, dt, xs, us, ss, mu, r_merit
     ):
     """ Evaluate merit function.
 
@@ -968,7 +972,7 @@ def eval_merit(
 
         # cost
         merit_cost += l(x, u, t) * dt
-        merit_cost += -epsilon * np.log(s).sum()
+        merit_cost += -mu * np.log(s).sum()
 
         # constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, ord=1)
@@ -1004,14 +1008,14 @@ def eval_cost(l, lf, t0, dt, xs, us):
 @numba.njit
 def eval_kkt_error(
         f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
-        xs, us, lamxs, ss, lamss, epsilon, ord=2):
+        xs, us, lamxs, ss, lamss, mu, ord=2):
     """ Evaluate l1 KKT error.
 
     Returns:
         kkt_error (float): Square root of KKT RSS (Residual Sum of Square).
     
     Note:
-        This function evaluate barrier-KKT error. If epsilon is set 0, \
+        This function evaluate barrier-KKT error. If mu is set 0, \
             exact KKT error is evaluated.
     """
     N = us.shape[0]
@@ -1032,7 +1036,7 @@ def eval_kkt_error(
     res = x0 - xs[0]
     dyn_error += np.sum(np.abs(res) ** ord)
 
-    eps1 = epsilon * np.ones(n_g)
+    mu1 = mu * np.ones(n_g)
 
     for i in range(N):
         # variables at state i
@@ -1040,7 +1044,7 @@ def eval_kkt_error(
         u = us[i]
         lamx = lamxs[i]
         s = ss[i]
-        mu = lamss[i]
+        lams = lamss[i]
         x1 = xs[i + 1]
         lamx1 = lamxs[i + 1]
         t = t0 + i * dt
@@ -1057,18 +1061,17 @@ def eval_kkt_error(
         ineq_error += np.sum(np.abs(res) ** ord)
 
         # Lx
-        res = -lamx + lamx1 + Hx * dt + gx(x, u, t).T @ mu
+        res = -lamx + lamx1 + Hx * dt + gx(x, u, t).T @ lams
         Lx_error += np.sum(np.abs(res) ** ord)
         Lx_inf = max(Lx_inf, np.max(np.abs(res)))
         nabra_l = max(nabra_l, np.max(np.abs(lx(x, u, t) * dt)))
-        # print('nabra_l', nabra_l)
 
         # Lu
-        res = Hu * dt + gu(x, u, t).T @ mu
+        res = Hu * dt + gu(x, u, t).T @ lams
         Lu_error += np.sum(np.abs(res) ** ord)
 
         # complementary condition
-        res = mu * s - eps1
+        res = lams * s - mu1
         cmpl_error += np.sum(np.abs(res) ** ord)
 
     # Lx[N]
@@ -1076,7 +1079,9 @@ def eval_kkt_error(
     Lx_error += np.sum(np.abs(res) ** ord)
     Lx_inf = max(Lx_inf, np.max(np.abs(res)))
 
-    nabra_l = max(nabra_l, np.max(np.abs(lfx(x, t))))
+    # nabra_l = max(nabra_l, np.max(np.abs(lfx(x, t))))
+
+    # print(Lx_inf, nabra_l)
 
     kkt_error = dyn_error + ineq_error + Lx_error + Lu_error + cmpl_error
 

@@ -44,11 +44,15 @@ class SolverBase(abc.ABC):
             self._lf, self._lfx, self._lfxx = self._dl
 
         # stepsize of line search.
-        self._alphas = np.array([0.5**i for i in range(8)])
+        # self._alphas = np.array([0.5**i for i in range(8)])
+
+        # stepsize parameter
+        self._alpha_min = 1e-4
+        self._r_alpha = 0.5
 
         # regularization value.
         self._gamma_init = 1e-3
-        self._rho_gamma = 5.0
+        self._r_gamma = 5.0
         self._gamma_min = 1e-8
         self._gamma_max = 1e+6
 
@@ -97,33 +101,46 @@ class SolverBase(abc.ABC):
         """
         return self._log_dir
     
-    def set_regularization_coeff(self, gamma_init: float=None, rho_gamma: float=None,
+    def set_regularization_param(self, gamma_init: float=None, r_gamma: float=None,
                                  gamma_min: float=None, gamma_max: float=None):
         """ Set regularization parameters of Newton method.
         
         Args: 
             gamma_init (float): Initial value of regularization coefficient.
-            rho_gamma (float >= 1): Increasing/decreasing factor of gamma.
+            r_gamma (float >= 1): Increasing/decreasing factor of gamma.
             gamma_min (float): Minimum value of gamma.
             gamma_max (float): Maximum value of gamma.
         """
         if gamma_init is not None:
             self._gamma_init = gamma_init
-        if rho_gamma is not None:
-            self._rho_gamma = rho_gamma
+        if r_gamma is not None:
+            self._r_gamma = r_gamma
         if gamma_min is not None:
             self._gamma_min = gamma_min
         if gamma_max is not None:
             self._gamma_max = gamma_max
 
-    def set_alphas(self, alphas: np.ndarray=None):
-        """ Set alphas; candidates of step size of line search.
+    # def set_alphas(self, alphas: np.ndarray=None):
+    #     """ Set alphas; candidates of step size of line search.
         
-        Args: 
-            alphas (np.ndarray): Array of alpha.  0 <= alpha_i <= 1.0.
+    #     Args: 
+    #         alphas (np.ndarray): Array of alpha.  0 <= alpha_i <= 1.0.
+    #     """
+    #     if alphas is not None:
+    #         self._alphas = np.array(alphas, dtype=float)
+    
+    def set_line_search_param(self, alpha_min: float=None, r_alpha: float=None):
+        """ Set parameters related to line search.
+
+        Args:
+            alpha_min (float): Minimum stepsize.
+            r_alpha (float): Update ratio of alpha. Must be (0, 1).
         """
-        if alphas is not None:
-            self._alphas = np.array(alphas, dtype=float)
+        if alpha_min is not None:
+            self._alpha_min = alpha_min
+        if r_alpha is not None:
+            self._r_alpha = r_alpha
+
 
     def set_max_iters(self, max_iters: int=None):
         """ Set number of maximum iteration.

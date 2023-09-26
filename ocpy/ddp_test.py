@@ -28,7 +28,7 @@ class DDPSolver(SolverBase):
             self.init_solver()
 
     def set_solver_parameters(
-            self, gamma_init: float=None, rho_gamma: float=None,
+            self, gamma_init: float=None, r_gamma: float=None,
             gamma_min: float=None,  gamma_max: float=None, alphas: np.ndarray=None, 
             stop_tol: float=None, max_iters: int=None, 
         ):
@@ -36,15 +36,15 @@ class DDPSolver(SolverBase):
 
         Args:
             gamma_init (float): Initial value of regularization coefficient.
-            rho_gamma (float): Increasing/decreasing factor of gamma. (>1)
+            r_gamma (float): Increasing/decreasing factor of gamma. (>1)
             gamma_min (float): Minimum value of damp.
             gamma_max (float): Maximum value of damp.
             alphas (np.ndarray): Line search steps.
             stop_tol (float): Stop threshold.
             max_iters (int): Maximum numbar of iterations.
         """
-        self.set_regularization_coeff(gamma_init, rho_gamma, gamma_min, gamma_max)
-        self.set_alphas(alphas)
+        self.set_regularization_param(gamma_init, r_gamma, gamma_min, gamma_max)
+        self.set_line_search_param(alpha_min=1e-3, r_alpha=0.5)
         self.set_stop_tol(stop_tol)
         self.set_max_iters(max_iters)
 
@@ -57,7 +57,7 @@ class DDPSolver(SolverBase):
             *self._df, *self._dl, 
             t0=self._t0, x0=self._x0, T=self._T, N=self._N,
             us_guess=self._us_guess, 
-            gamma_init=self._gamma_init, rho_gamma=self._rho_gamma,
+            gamma_init=self._gamma_init, r_gamma=self._r_gamma,
             gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
             alphas=self._alphas,
             stop_tol=self._stop_tol, max_iters=10
@@ -113,12 +113,12 @@ class DDPSolver(SolverBase):
         assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
             gamma_init = self._gamma_init
-            rho_gamma = self._rho_gamma
+            r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
-            rho_gamma = 1.0
+            r_gamma = 1.0
         if enable_line_search:
             alphas = self._alphas
         else:
@@ -135,7 +135,7 @@ class DDPSolver(SolverBase):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_init, r_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         )
         # computation time
@@ -159,7 +159,7 @@ class DDPSolver(SolverBase):
     @numba.njit
     def _solve(
             f, fx, fu, fxx, fux, fuu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_init, r_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         ):
         """ DDP algorithm.
@@ -349,7 +349,7 @@ class DDPSolver(SolverBase):
                 iters -= 1
                 break
             elif delta_V > 0:
-                gamma *= rho_gamma
+                gamma *= r_gamma
                 Js[iters] = J
                 continue
             # line search 
@@ -363,11 +363,11 @@ class DDPSolver(SolverBase):
                     xs = xs_new
                     us = us_new
                     J = J_new
-                    gamma /= rho_gamma
+                    gamma /= r_gamma
                     break
             else:
                 # line search failed
-                gamma *= rho_gamma
+                gamma *= r_gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
             Js[iters] = J
         ts = np.array([t0 + i*dt for i in range(N + 1)])
@@ -445,7 +445,7 @@ class iLQRSolver(DDPSolver):
             *self._df, *self._dl, 
             t0=self._t0, x0=self._x0, T=self._T, N=self._N,
             us_guess=self._us_guess, 
-            gamma_init=self._gamma_init, rho_gamma=self._rho_gamma,
+            gamma_init=self._gamma_init, r_gamma=self._r_gamma,
             gamma_min=self._gamma_min, gamma_max=self._gamma_max, 
             alphas=self._alphas,
             stop_tol=self._stop_tol, max_iters=10,
@@ -502,12 +502,12 @@ class iLQRSolver(DDPSolver):
         assert us_guess.shape == (N, self._n_u)
         if gamma_fixed is None:
             gamma_init = self._gamma_init
-            rho_gamma = self._rho_gamma
+            r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
-            rho_gamma = 1.0
+            r_gamma = 1.0
         if enable_line_search:
             alphas = self._alphas
         else:
@@ -524,7 +524,7 @@ class iLQRSolver(DDPSolver):
         # solve
         xs, us, ts, Js, is_success = self._solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_init, r_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         )
         # computation time
@@ -548,7 +548,7 @@ class iLQRSolver(DDPSolver):
     @numba.njit
     def _solve(
             f, fx, fu, l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-            t0, x0, T, N, us_guess, gamma_init, rho_gamma, gamma_min, gamma_max,
+            t0, x0, T, N, us_guess, gamma_init, r_gamma, gamma_min, gamma_max,
             alphas, stop_tol, max_iters
         ):
         """ iLQR algorithm.
@@ -712,7 +712,7 @@ class iLQRSolver(DDPSolver):
                 iters -= 1
                 break
             elif delta_V > 0:
-                gamma *= rho_gamma
+                gamma *= r_gamma
                 Js[iters] = J
                 continue
             # line search 
@@ -726,11 +726,11 @@ class iLQRSolver(DDPSolver):
                     xs = xs_new
                     us = us_new
                     J = J_new
-                    gamma /= rho_gamma
+                    gamma /= r_gamma
                     break
             else:
                 # line search failed
-                gamma *= rho_gamma
+                gamma *= r_gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
             Js[iters] = J
         ts = np.array([t0 + i*dt for i in range(N + 1)])

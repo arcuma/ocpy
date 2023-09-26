@@ -100,7 +100,7 @@ class UCRRSolver(SolverBase):
 
     def solve(
             self,
-            gamma_fixed: float=None, enable_line_search: bool=True,
+            gamma_fixed: float=None, enable_line_search: bool=False,
             max_iters: int=None, warm_start :bool=False,
             result=False, log=False, plot=False
         ):
@@ -108,7 +108,7 @@ class UCRRSolver(SolverBase):
 
         Args:
             gamma_fixed (float): If set, regularization coefficient is fixed.
-            enable_line_search (bool=True): If true, enable line searching.
+            enable_line_search (bool=True): If true, enable line search.
             warm_start (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
@@ -123,17 +123,19 @@ class UCRRSolver(SolverBase):
         """
         if gamma_fixed is None:
             gamma_init = self._gamma_init
-            rho_gamma = self._rho_gamma
+            r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
-            rho_gamma = 1.0
+            r_gamma = 1.0
 
         if enable_line_search:
-            alphas = self._alphas
+            alpha_min = self._alpha_min
+            r_alpha = self._r_alpha
         else:
-            alphas = np.array([1.0])
+            alpha_min = 1.0
+            r_alpha = self._r_alpha
 
         if max_iters is None:
             max_iters = self._max_iters
@@ -163,7 +165,7 @@ class UCRRSolver(SolverBase):
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
                 self._t0, self._x0, self._T, self._N, 
                 xs_guess, us_guess, lamxs_guess,
-                gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
+                gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
                 self._kkt_tol, max_iters
         )
 
@@ -210,8 +212,8 @@ class UCRRSolver(SolverBase):
                l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
                t0, x0, T, N,
                xs, us, lamxs,
-               gamma_init, rho_gamma, gamma_min, gamma_max,
-               alphas, kkt_tol, max_iters):
+               gamma_init, r_gamma, gamma_min, gamma_max,
+               alpha_min, r_alpha, kkt_tol, max_iters):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lamxs, ts, is_success,
@@ -288,7 +290,7 @@ class UCRRSolver(SolverBase):
                 = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
                     xs, us, lamxs, dxs, dus, dlamxs,
-                    alphas, cost, kkt_error, r_merit
+                    alpha_min, r_alpha, cost, kkt_error, r_merit
             )
 
             # evaluate dynamics feasibility
@@ -296,9 +298,9 @@ class UCRRSolver(SolverBase):
 
             # modify regularization coefficient
             if kkt_error_new < kkt_error:
-                gamma /= rho_gamma
+                gamma /= r_gamma
             else:
-                gamma *= rho_gamma
+                gamma *= r_gamma
 
             # clip gamma
             gamma = min(max(gamma, gamma_min), gamma_max)
@@ -446,10 +448,10 @@ def compute_linearlized_kkt_blocks(
 
 @numba.njit
 def backward_recursion(
-        As: np.ndarray, Bs: np.ndarray,
-        Qxxs: np.ndarray, Quxs: np.ndarray, Quus: np.ndarray,
-        x_bars: np.ndarray, lx_bars: np.ndarray, lu_bars: np.ndarray,
-        gamma: float):
+        As, Bs,
+        Qxxs, Quxs, Quus,
+        x_bars, lx_bars, lu_bars,
+        gamma):
     """ Backward recursion.
 
     Returns:
@@ -517,7 +519,7 @@ def forward_recursion(
 def line_search(
         f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
         xs, us, lamxs, dxs, dus, dlamxs,
-        alphas, cost, kkt_error, r_merit):
+        alpha_min, r_alpha, cost, kkt_error, r_merit):
     """ Line search (multiple-shooting).
     
     Returns:
@@ -536,8 +538,10 @@ def line_search(
         t0, x0, dt, xs, us, dxs, dus, r_merit
     )
 
-    # backtracking line search (c1 = 0.0)
-    for alpha in alphas:
+    alpha = 1.0
+
+    # backtracking line search
+    while True:
 
         xs_new = xs + alpha * dxs
         us_new = us + alpha * dus
@@ -557,14 +561,20 @@ def line_search(
             l, lf, t0, dt, xs_new, us_new
         )
 
+        # stop condition
         if merit_new < merit + c_armijo * alpha * deriv_merit:
             break
-
         if cost_new < cost:
             break
-
         if (not np.isnan(cost_new)) and kkt_error_new < kkt_error:
             break
+
+        # reached minimum alpha
+        if alpha < alpha_min:
+            break
+
+        # update alpha
+        alpha *= r_alpha
     
     return xs_new, us_new, lamxs_new, cost_new, kkt_error_new, alpha, r_merit
 
@@ -682,7 +692,7 @@ def eval_cost(l, lf, t0, dt, xs, us):
 
 @numba.njit
 def eval_kkt_error(
-        f, fx, fu, lx, lu, lfx, t0, x0, dt, xs, us, lamxs):
+        f, fx, fu, lx, lu, lfx, t0, x0, dt, xs, us, lamxs, ord=2):
     """ Evaluate KKT error.
 
     Returns:
@@ -693,7 +703,7 @@ def eval_kkt_error(
     kkt_error = 0.0
 
     res = x0 - xs[0]
-    kkt_error += np.sum(res ** 2)
+    kkt_error += np.sum(res ** ord)
 
     for i in range(N):
         x = xs[i]
@@ -704,18 +714,18 @@ def eval_kkt_error(
         t = t0 + i * dt
 
         res = x + f(x, u, t) * dt - x1
-        kkt_error += np.sum(res ** 2)
+        kkt_error += np.sum(res ** ord)
 
         res = -lamx + lamx1 + (lx(x, u, t) + lamx1.T @ fx(x, u, t)) * dt
-        kkt_error += np.sum(res ** 2)
+        kkt_error += np.sum(res ** ord)
 
         res = (lu(x, u, t) + lamx1.T @ fu(x, u, t)) * dt
-        kkt_error += np.sum(res ** 2)
+        kkt_error += np.sum(res ** ord)
 
     res = lfx(xs[N], t0 + N * dt) - lamxs[N]
-    kkt_error += np.sum(res ** 2)
+    kkt_error += np.sum(res ** ord)
 
-    return np.sqrt(kkt_error)
+    return kkt_error ** (1 / ord)
 
 
 @numba.njit

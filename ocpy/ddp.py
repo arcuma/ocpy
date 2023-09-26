@@ -102,17 +102,19 @@ class DDPSolver(SolverBase):
         """
         if gamma_fixed is None:
             gamma_init = self._gamma_init
-            rho_gamma = self._rho_gamma
+            r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
             gamma_init =  gamma_min = gamma_max = gamma_fixed
-            rho_gamma = 1.0
+            r_gamma = 1.0
 
         if enable_line_search:
-            alphas = self._alphas
+            alpha_min = self._alpha_min
+            r_alpha = self._r_alpha
         else:
-            alphas = np.array([1.0])
+            alpha_min = 1.0
+            r_alpha = self._r_alpha
 
         if max_iters is None:
             max_iters = self._max_iters
@@ -137,7 +139,7 @@ class DDPSolver(SolverBase):
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
             us_guess,
-            gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
+            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
             self._stop_tol, max_iters, self._is_ddp
         )
 
@@ -179,7 +181,7 @@ class DDPSolver(SolverBase):
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             t0, x0, T, N, us_guess,
-            gamma_init, rho_gamma, gamma_min, gamma_max, alphas,
+            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
             stop_tol, max_iters, is_ddp
         ):
         """ DDP algorithm.
@@ -223,20 +225,30 @@ class DDPSolver(SolverBase):
                 is_success = True
                 iters -= 1
                 break
+            
+            # step size
+            alpha = 1.0
 
             # line search
-            for alpha in alphas:
+            while True:
                 # forward pass
                 xs_new, us_new, cost_new = forward_pass(
                     f, l, lf,
                     t0, dt, xs, us,
                     ks, Ks, alpha
                 )
+
+                # stop line search condition
                 if cost_new < cost:
-                    gamma /= rho_gamma
+                    gamma /= r_gamma
                     break
-            else:
-                gamma *= rho_gamma
+
+                if alpha < alpha_min:
+                    gamma *= r_gamma
+                    break
+                
+                # update alpha
+                alpha *= r_alpha
 
             # update trajectory
             xs = xs_new
@@ -389,7 +401,7 @@ def backward_pass(fx, fu, fxx, fux, fuu,
     Vx = lfx(xs[N], t0 + T)
     Vxx = lfxx(xs[N], t0 + T)
 
-    # expected cost cahnge of all stage
+    # expected cost change of all stage
     delta_V = 0.0
 
     # Regularization matrix
@@ -436,6 +448,7 @@ def backward_pass(fx, fu, fxx, fux, fuu,
         delta_V_i = 0.5 * k.T @ Quu @ k + k.T @ Qu
         Vx = Qx - K.T @ Quu @ k
         Vxx = Qxx - K.T @ Quu @ K
+        
         delta_V += delta_V_i
 
     return ks, Ks, delta_V
