@@ -120,15 +120,6 @@ class SolverBase(abc.ABC):
         if gamma_max is not None:
             self._gamma_max = gamma_max
 
-    # def set_alphas(self, alphas: np.ndarray=None):
-    #     """ Set alphas; candidates of step size of line search.
-        
-    #     Args: 
-    #         alphas (np.ndarray): Array of alpha.  0 <= alpha_i <= 1.0.
-    #     """
-    #     if alphas is not None:
-    #         self._alphas = np.array(alphas, dtype=float)
-    
     def set_line_search_param(self, alpha_min: float=None, r_alpha: float=None):
         """ Set parameters related to line search.
 
@@ -140,7 +131,6 @@ class SolverBase(abc.ABC):
             self._alpha_min = alpha_min
         if r_alpha is not None:
             self._r_alpha = r_alpha
-
 
     def set_max_iters(self, max_iters: int=None):
         """ Set number of maximum iteration.
