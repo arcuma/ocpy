@@ -483,6 +483,8 @@ class OCP:
         return self._dh_num
     
     def get_ocp_name(self) -> str:
+        """ Get OCP name, which is used for directory name of log data.
+        """
         return self._ocp_name
 
     def get_x(self) -> sym.Matrix:
@@ -707,12 +709,11 @@ class OCP:
         if self._has_eq_constraints:
             display('Equality constraints:')
             display(Math(r"h(x, u, t) = %s \leq 0" % sym.latex(self._dh_sym[0])))
-        display('Horizon length')
+        display('Horizon length:')
         display(Math(r"T = %s" % sym.latex(self._T)))
-        display('Number of stage')
+        display('Number of stage:')
         display(Math(r"N = %s" % sym.latex(self._N)))
-        display('Initial time')
+        display('Initial time:')
         display(Math(r"t_0 = %s" % sym.latex(self._t0)))
-        display('Initial state')
+        display('Initial state:')
         display(Math(r"x_0 = %s" % sym.latex(sym.Matrix(self._x0))))
-
