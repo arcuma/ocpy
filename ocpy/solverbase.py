@@ -43,18 +43,15 @@ class SolverBase(abc.ABC):
         self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
             self._lf, self._lfx, self._lfxx = self._dl
 
-        # stepsize of line search.
-        # self._alphas = np.array([0.5**i for i in range(8)])
-
         # stepsize parameter
         self._alpha_min = 1e-4
         self._r_alpha = 0.5
 
         # regularization value.
-        self._gamma_init = 1e-3
+        self._gamma_init = 0.0
         self._r_gamma = 5.0
-        self._gamma_min = 1e-8
-        self._gamma_max = 1e+6
+        self._gamma_min = 0.0
+        self._gamma_max = 0.0
 
         # solver parameters
         self._max_iters = 1000
@@ -223,7 +220,7 @@ class SolverBase(abc.ABC):
     @abc.abstractmethod
     def solve(
             self,
-            gamma_fixed: float=None, enable_line_search: bool=True,
+            update_gamma: bool=True, enable_line_search: bool=True,
             max_iters: int=None, warm_start: bool=False,
             result: bool=False, log: bool=False, plot: bool=False
         ):

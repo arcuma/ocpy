@@ -31,9 +31,9 @@ class RiccatiRecursionSolver(SolverBase):
             self._has_ineq_constr = True
         self._dg = ocp.get_dg()
 
-        self._mu_init = 1e-2
+        self._mu_init = 1e-1
         self._r_mu = 0.01
-        self._mu_min = 1e-4
+        self._mu_min = 1e-8
         self._update_mu = True
 
         self._kkt_tol = 1e-4
@@ -197,14 +197,14 @@ class RiccatiRecursionSolver(SolverBase):
 
         # compile
         self.solve(
-            gamma_fixed=1e3, max_iters=3
+            max_iters=3
         )
 
         print("Initialization done.")
 
     def solve(
             self,
-            gamma_fixed: float=None, enable_line_search: bool=False,
+            update_gamma: bool=False, enable_line_search: bool=False,
             update_mu: bool=True,
             max_iters: int=None, warm_start :bool=False,
             result=False, log=False, plot=False
@@ -212,7 +212,7 @@ class RiccatiRecursionSolver(SolverBase):
         """ Solve OCP via Riccati Recursion iteration.
 
         Args:
-            gamma_fixed (float): If set, regularization coefficient is fixed.
+            update_gamma (bool): If True, regularization coefficient is updated.
             enable_line_search (bool=True): If true, enable line searching.
             update_mu (bool=True): If True, barrier parameter is updated \
                 while iteration.
@@ -229,13 +229,13 @@ class RiccatiRecursionSolver(SolverBase):
             us (np.ndarray): Optimal control trajectory. N * n_u.
             is_success (bool): Success or not.
         """
-        if gamma_fixed is None:
+        if update_gamma:
             gamma_init = self._gamma_init
             r_gamma = self._r_gamma
             gamma_min = self._gamma_min
             gamma_max = self._gamma_max
         else:
-            gamma_init =  gamma_min = gamma_max = gamma_fixed
+            gamma_init =  gamma_min = gamma_max = self._gamma_init
             r_gamma = 1.0
 
         if enable_line_search:
@@ -326,8 +326,6 @@ class RiccatiRecursionSolver(SolverBase):
         # plot            
         if plot:
             self.plot_data(save=log)
-
-        return xs, us, ts, is_success
 
     @staticmethod
     @numba.njit
