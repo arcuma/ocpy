@@ -469,7 +469,8 @@ class RiccatiRecursionSolver(SolverBase):
 
             # update barrier parameter
             if update_mu:
-                kkt_tol_mu = max(mu * 1, kkt_tol - mu)
+                th = 10.0
+                kkt_tol_mu = max(mu * th, kkt_tol - mu)
                 # kkt_tol_mu = mu
                 if kkt_error_mu < kkt_tol_mu and mu >= kkt_tol / 100:
                     mu *= r_mu

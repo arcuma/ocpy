@@ -547,6 +547,64 @@ class OCP:
             n (int): dimension of columns
         """
         return sym.zeros(m, n)
+    
+    @staticmethod
+    def get_barrier(w: sym.Matrix, w_min: np.ndarray=None, w_max: np.ndarray=None,
+                    mu: float=1e-2, matrix_expr=True):
+        """ Get logarithm barrier function for constraint w_min <= w <= w_max.
+
+        Args:
+            w (sym.Matrix): Vector. (Assuming control input).
+            w_min (np.ndarray): Minimum value of w.
+            w_max (np.ndarray): Minimum value of w.
+            mu (float): Barrier coefficient.
+            matrix_expr (float): If True, return 1x1 Matrix. Else Symbol.
+        """
+        n_w = w.shape[0]
+
+        cost = 0
+        if w_min is not None:
+            assert n_w == len(w_min)
+            for i in range(n_w):
+                cost += -mu * sym.ln(w[i] - w_min[i])
+        if w_max is not None:
+            assert n_w == len(w_max)
+            for i in range(n_w):
+                cost += -mu * sym.ln(w_max[i] - w[i])
+        
+        if matrix_expr:
+            cost = sym.Matrix([cost])
+        
+        return cost
+        
+    @staticmethod
+    def get_penalty(w: sym.Matrix, w_min: np.ndarray=None, w_max: np.ndarray=None,
+                    mu: float=1e-2, matrix_expr=True):
+        """ Get exponential penalty function for constraint w_min <= w <= w_max.
+
+        Args:
+            w (sym.Matrix): Vector. (Assuming control input).
+            w_min (np.ndarray): Minimum value of w.
+            w_max (np.ndarray): Minimum value of w.
+            mu (float): Barrier coefficient.
+            matrix_expr (float): If True, return 1x1 Matrix. Else Symbol.
+        """
+        n_w = w.shape[0]
+
+        cost = 0
+        if w_min is not None:
+            assert n_w == len(w_min)
+            for i in range(n_w):
+                cost += mu * sym.exp(-(w[i] - w_min[i]))
+        if w_max is not None:
+            assert n_w == len(w_max)
+            for i in range(n_w):
+                cost += mu * sym.exp(-(w_max[i] - w[i]))
+        
+        if matrix_expr:
+            cost = sym.Matrix([cost])
+        
+        return cost
 
     def define_scalar_constant(self, constant_name: str, value: float):
         """
