@@ -1,7 +1,6 @@
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
-ocpy/riccati_recursion.py
 log/
 log_mpc/
 test/

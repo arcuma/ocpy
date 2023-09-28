@@ -41,6 +41,7 @@ class MPC:
         self._result_mpc['computation_time_hist'] = np.ndarray(0)
         self._result_mpc['computation_time_ave'] = None
 
+        self._enable_line_search = None
         self._initialized = False
     
     def set_log_directory(self, log_dir: str):
@@ -60,13 +61,17 @@ class MPC:
         """
         return self._log_dir
 
-    def init_mpc(self):
+    def init_mpc(self, enable_line_search=True):
         """ Solve ocp once for getting solution guess.
+
+        Args:
+            enable_line_search (bool): If True, enable line search in the solver.
         
         Note:
             Do not change initial condition after this method is called.
         """
-        self._solver.solve()
+        self._solver.solve(enable_line_search=enable_line_search)
+        self._enable_line_search = enable_line_search
         self._initialized = True
 
     def run(self, T_sim: float=20, sampling_time: float=0.005,
@@ -98,8 +103,6 @@ class MPC:
         f = self._f
         solver = self._solver
 
-        self._solver.set_max_iters(max_iters_mpc)
-
         ts_real = np.arange(t, t + T_sim + sampling_time*1e-6, sampling_time)
 
         # record real trajectory of state and control.
@@ -123,7 +126,9 @@ class MPC:
                 us_real.append(u)
 
             solver.set_initial_condition(t, x)
-            solver.solve(warm_start=True, gamma_fixed=0.0)
+            solver.solve(warm_start=True, update_gamma=False,
+                         enable_line_search=self._enable_line_search,
+                         max_iters=max_iters_mpc)
 
             # In MPC, we use initial value of optimal input trajectory.
             us_opt = solver.get_us_opt()

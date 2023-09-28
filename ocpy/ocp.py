@@ -1,5 +1,6 @@
 import sympy as sym
 import numpy as np
+from IPython.display import display, Math
 
 from ocpy import symutils
 from ocpy.dynamics import SymDynamics, NumDynamics
@@ -482,6 +483,8 @@ class OCP:
         return self._dh_num
     
     def get_ocp_name(self) -> str:
+        """ Get OCP name, which is used for directory name of log data.
+        """
         return self._ocp_name
 
     def get_x(self) -> sym.Matrix:
@@ -547,6 +550,64 @@ class OCP:
             n (int): dimension of columns
         """
         return sym.zeros(m, n)
+    
+    @staticmethod
+    def get_barrier(w: sym.Matrix, w_min: np.ndarray=None, w_max: np.ndarray=None,
+                    mu: float=1e-2, matrix_expr=True):
+        """ Get logarithm barrier function for constraint w_min <= w <= w_max.
+
+        Args:
+            w (sym.Matrix): Vector. (Assuming control input).
+            w_min (np.ndarray): Minimum value of w.
+            w_max (np.ndarray): Minimum value of w.
+            mu (float): Barrier coefficient.
+            matrix_expr (float): If True, return 1x1 Matrix. Else Symbol.
+        """
+        n_w = w.shape[0]
+
+        cost = 0
+        if w_min is not None:
+            assert n_w == len(w_min)
+            for i in range(n_w):
+                cost += -mu * sym.ln(w[i] - w_min[i])
+        if w_max is not None:
+            assert n_w == len(w_max)
+            for i in range(n_w):
+                cost += -mu * sym.ln(w_max[i] - w[i])
+        
+        if matrix_expr:
+            cost = sym.Matrix([cost])
+        
+        return cost
+        
+    @staticmethod
+    def get_penalty(w: sym.Matrix, w_min: np.ndarray=None, w_max: np.ndarray=None,
+                    mu: float=1e-2, matrix_expr=True):
+        """ Get exponential penalty function for constraint w_min <= w <= w_max.
+
+        Args:
+            w (sym.Matrix): Vector. (Assuming control input).
+            w_min (np.ndarray): Minimum value of w.
+            w_max (np.ndarray): Minimum value of w.
+            mu (float): Barrier coefficient.
+            matrix_expr (float): If True, return 1x1 Matrix. Else Symbol.
+        """
+        n_w = w.shape[0]
+
+        cost = 0
+        if w_min is not None:
+            assert n_w == len(w_min)
+            for i in range(n_w):
+                cost += mu * sym.exp(-(w[i] - w_min[i]))
+        if w_max is not None:
+            assert n_w == len(w_max)
+            for i in range(n_w):
+                cost += mu * sym.exp(-(w_max[i] - w[i]))
+        
+        if matrix_expr:
+            cost = sym.Matrix([cost])
+        
+        return cost
 
     def define_scalar_constant(self, constant_name: str, value: float):
         """
@@ -633,97 +694,26 @@ class OCP:
             matrix_symbols.append(matrix_symbol)
         return matrix_symbols   
 
-    @staticmethod
-    def SetAllAtOnce(ocp_name: str,
-            x: sym.Matrix, u: sym.Matrix, t:sym.Symbol,  dt: sym.Symbol, 
-            f: sym.Matrix, l: sym.Symbol, lf: sym.Symbol,
-            g: sym.Matrix, h: sym.Matrix,
-            t0: float, x0: np.ndarray, T: float, N: int, 
-            scalar_dict: dict=None, vector_dict: dict=None,  matrix_dict: dict=None,
-            is_continuous=True, simplification=False):
-        """ Define optimal control problem. If symbolic constatnts are included, \
-            pass them as dict{name: (symbol, value)} for substitution.
-
-        Args:
-            x (sym.Matrix): State vector.
-            u (sym.Matrix): Control input vector.
-            t (sym.Symbol): Time.
-            dt (sym.Symbol): Time discretization step. Its value is T/N.  
-            f (sym.Matrix): State function.
-            l (sym.Symbol): Stage cost.
-            lf (sym.Symbol): Terminal cost.
-            g (sym.Matrix): Inequality constraints.
-            h (sym.Matrix): Inequality constraints.
-            t0 (float): Initial Time.
-            x0 (np.ndarray): Initial state. size must be n_x.
-            T (float): Horizon length.
-            N (int): Discretization grids.
-            scalar_dict (dict) : {"name": (symbol, value)})
-            vector_dict (dict) : {"name": (symbol, value)}) 
-            matrix_dict (dict) : {"name": (symbol, value)}) 
-            is_continuous (bool): Is dynamics and costs are continuous-time. \
-                If true, they will be discretized.
-
-        Returns:
-            OCP: ocp class instance.
+    def display(self):
+        """ Display problem.
         """
-        n_x = x.shape[0]
-        n_u = u.shape[0]
-        ocp = OCP(n_x, n_u, ocp_name)
-        ocp._scalar_dict = scalar_dict
-        ocp._vector_dict = vector_dict
-        ocp._matrix_dict = matrix_dict
-        ocp.define(f, l, lf, g, h, t0, x0, T, N,
-            is_continuous, simplification)
-        return ocp
-    
-    @staticmethod
-    def SampleOCPCartpole(simplification: bool=False):
-        """ Return sample cartpole OCP.
-        """
-        from sympy import sin, cos, ln
-        n_x = 4
-        n_u = 1
-        sim_name = 'cartpole'
-        cartpole_ocp = OCP(sim_name, n_x, n_u)
-        t = cartpole_ocp.get_t()
-        x = cartpole_ocp.get_x()
-        u = cartpole_ocp.get_u()
-        # define constants
-        m_c, m_p, l, g, u_min, u_max, u_eps \
-            = cartpole_ocp.define_scalar_constants(
-                [('m_c', 2), ('m_p', 0.1), ('l', 0.5), ('g', 9.80665), 
-                ('u_min', -20),  ('u_max', 20), ('u_eps', 0.001)])
-        q = cartpole_ocp.define_vector_constant('q', [2.5, 10, 0.01, 0.01])
-        r = cartpole_ocp.define_vector_constant('r', [1])
-        q_f = cartpole_ocp.define_vector_constant('q_{f}', [2.5, 10, 0.01, 0.01])
-        x_ref = cartpole_ocp.define_vector_constant('x_{ref}', [0, np.pi, 0, 0])
-        # diagonal weight    
-        Q = sym.diag(*q)
-        Q_f = sym.diag(*q_f)
-        R = sym.diag(*r)
-        # state equation
-        f = cartpole_ocp.get_zero_vector(n_x)
-        f[0] = x[2]
-        f[1] = x[3]
-        f[2] = (u[0] + m_p*sin(x[1])*(l*x[1]*x[1] + g*cos(x[1]))) \
-                /( m_c+m_p*sin(x[1])*sin(x[1]))
-        f[3] = (-u[0] * cos(x[1]) - m_p*l*x[1]*x[1]*cos(x[1])*sin(x[1]) 
-                - (m_c+m_p)*g*sin(x[1])) / ( l*(m_c + m_p*sin(x[1])*sin(x[1])))
-        # barrier function for inequality constraints.
-        u_barrier = sym.Matrix([
-            sum(-ln(u[i] - u_min) - ln(u_max - u[i]) for i in range(n_u)) * 1e-5
-        ])
-        # cost function
-        l = (x - x_ref).T * Q * (x - x_ref) + u.T * R * u + u_barrier
-        lf = (x - x_ref).T * Q_f * (x - x_ref)
-        # horizon
-        T = 5.0
-        N = 200
-        # initial condition
-        t0 = 0.0
-        x0 = np.array([0.0, 0.0, 0.0, 0.0])
-        cartpole_ocp.define_unconstrained(
-            f, l, lf, t0, x0, T, N,
-            is_continuous=True, simplification=simplification)
-        return cartpole_ocp
+        display('State equation:')
+        display(Math(r"\dot{x} = f(x, u, t) \equiv %s" % sym.latex(self._df_sym[0])))
+        display('Stage cost:')
+        display(Math(r"l(x, u, t) = %s" % sym.latex(self._dl_sym[0])))
+        display('Terminal cost:')
+        display(Math(r"l_f(x, t) = %s" % sym.latex(self._dl_sym[6])))
+        if self._has_ineq_constraints:
+            display('Inequality constraints:')
+            display(Math(r"g(x, u, t) = %s \leq 0" % sym.latex(self._dg_sym[0])))
+        if self._has_eq_constraints:
+            display('Equality constraints:')
+            display(Math(r"h(x, u, t) = %s \leq 0" % sym.latex(self._dh_sym[0])))
+        display('Horizon length:')
+        display(Math(r"T = %s" % sym.latex(self._T)))
+        display('Number of stage:')
+        display(Math(r"N = %s" % sym.latex(self._N)))
+        display('Initial time:')
+        display(Math(r"t_0 = %s" % sym.latex(self._t0)))
+        display('Initial state:')
+        display(Math(r"x_0 = %s" % sym.latex(sym.Matrix(self._x0))))
