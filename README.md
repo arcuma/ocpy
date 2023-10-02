@@ -28,13 +28,14 @@ are currently implemented.
    ``` sh
    pip3 install -r requirements.txt
    ```
-1. Run examples below.
+1. Run examples or formulate your own problem.
 
 ## Examples
-In /examples/
+In /examples/,
 - LQR
 - cartpole
 - hexacopter
+- pendubot
 
 https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
 
