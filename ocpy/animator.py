@@ -17,7 +17,6 @@ class CartPoleAnimator:
         Args:
             log_dir (str): Direcory in which logs are stored.
             file_name (str): Animation is saved as (filename).mp4.
-
         """
         # Load data
         self._log_dir = log_dir
@@ -43,8 +42,8 @@ class CartPoleAnimator:
         self._ball_r = 0.050
         # drawing range
         x_axis_lim = max(abs(np.amax(self._xs[:, 0])),
-                    abs(np.amin(self._xs[:, 0])),
-                    1.0) + self._pole_length + self._ball_r
+                         abs(np.amin(self._xs[:, 0])),
+                         1.0) + self._pole_length + self._ball_r
         self._x_min = -x_axis_lim
         self._x_max = x_axis_lim
         scale = 2 * x_axis_lim
@@ -55,7 +54,6 @@ class CartPoleAnimator:
         # frame skip rate
         self._skip_rate = 1
         self._total_frames = (int)(self._ts.size / self._skip_rate)
-
     
     def generate_animation(self, save: bool=True, skip_rate: int=1):
         """ Genarating animation.
@@ -76,12 +74,12 @@ class CartPoleAnimator:
         control = self._us[0, :]
         # cart position
         cart_center_x = state[0]
-        cart_lu_x = cart_center_x - self._cart_width / 2
-        cart_lu_y = 0
-        cart_center_y = cart_lu_y + self._cart_height / 2
+        cart_ll_x = cart_center_x - self._cart_width / 2
+        cart_ll_y = 0
+        cart_center_y = cart_ll_y + self._cart_height / 2
         # cart
         self._cart = patches.Rectangle(
-            xy=(cart_lu_x, cart_lu_y), width=self._cart_width,
+            xy=(cart_ll_x, cart_ll_y), width=self._cart_width,
             height=self._cart_height
             )
         # pole
@@ -148,7 +146,6 @@ class CartPoleAnimator:
             print('Animation was saved at ' + self._log_dir + ' .')
         plt.show()
 
-
     def _update_animation(self, i):
         """ Callback function handed to FuncAnimation.
         """
@@ -158,10 +155,10 @@ class CartPoleAnimator:
         control = self._us[frame, :]
         # cart position
         cart_center_x = state[0]
-        cart_lu_x = cart_center_x - self._cart_width / 2
-        cart_lu_y = 0
-        cart_center_y = cart_lu_y + self._cart_height / 2
-        self._cart.set_x(cart_lu_x)
+        cart_ll_x = cart_center_x - self._cart_width / 2
+        cart_ll_y = 0
+        cart_center_y = cart_ll_y + self._cart_height / 2
+        self._cart.set_x(cart_ll_x)
         # pole position
         pole_s_x = cart_center_x
         pole_s_y = cart_center_y
@@ -328,6 +325,157 @@ class HexacopterAnimator:
         from scipy.spatial.transform import Rotation
         rotation = Rotation.from_euler('xyz', rpy)
         return rotation.as_matrix()
+
+
+class PendubotAnimator:
+    """ Class of generating animation of pendubot.
+    """
+    def __init__(self, log_dir: str, file_name: str='pendubot'):
+        """ Constructor.
+
+        Args:
+            log_dir (str): Directory in which logs are stored.
+            file_name (str): Animation is saved as (filename).mp4
+        """
+        # Load data
+        self._log_dir = log_dir
+        self._file_name = file_name
+        self._xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
+        self._us = np.genfromtxt(join(log_dir, 'u_log.txt'))
+        self._ts = np.genfromtxt(join(log_dir, 't_log.txt'))
+        if self._xs.ndim == 1:
+            self._xs = self._xs.reshape((-1, 1))
+        if self._us.ndim == 1:
+            self._us = self._us.reshape((-1, 1))
+        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
+        if self._us.shape[0] == self._xs.shape[0] - 1:
+            self._us = np.append(self._us, [self._us[-1]], axis=0)
+        self._n_x = self._xs.shape[1]
+        self._n_u = self._us.shape[1]
+        self._N = self._ts.size - 1
+        self._dtau = self._ts[1] - self._ts[0]
+        # drawing range
+        self._x_min = -1
+        self._x_max = 1
+        self._y_min = -0.75
+        self._y_max = 0.75
+        # two link arm
+        self._l1 = 0.3
+        self._l2 = 0.3
+        # frame skip rate
+        self._skip_rate = 1
+        self._total_frames = (int)(self._ts.size / self._skip_rate)
+
+    def generate_animation(self, save: bool=True, skip_rate: int=1):
+        """ Genarating animation.
+
+        Args:
+            save (bool): If True, animation is saved to log_dir.
+            skip_rate (int): Skip rate.
+        """
+        # frame
+        self._skip_rate = skip_rate
+        self._total_frames = (int)(self._ts.size / self._skip_rate)
+        self._fig = plt.figure(figsize=(12, 9))
+        self._ax = plt.axes(xlim=(self._x_min, self._x_max),
+                            ylim=(self._y_min, self._y_max))
+        # aspect ratio
+        self._ax.set_aspect('equal')
+        # x0 and u0
+        state = self._xs[0, :]
+        control = self._us[0, :]
+        # link1
+        theta1 = state[0]
+        link1_sx = 0
+        link1_sy = 0
+        link1_tx = link1_sx + self._l1 * np.sin(theta1)
+        link1_ty = link1_sy - self._l1 * np.cos(theta1)
+        self._link1 = patches.Polygon(
+            xy=[[link1_sx, link1_sy], [link1_tx, link1_ty]],
+            ec='tab:blue',
+            linewidth=6.0
+        )
+        # link2
+        theta2 = state[1]
+        link2_sx = link1_tx
+        link2_sy = link1_ty
+        link2_tx = link2_sx + self._l2 * np.sin(theta1 + theta2)
+        link2_ty = link2_sy - self._l2 * np.cos(theta1 + theta2)
+        self._link2 = patches.Polygon(
+            xy=[[link2_sx, link2_sy], [link2_tx, link2_ty]],
+            ec='tab:green',
+            linewidth=6.0
+        )
+        # add patch to ax
+        self._ax.add_patch(self._link1)
+        self._ax.add_patch(self._link2)
+        # display
+        self._time_text = self._ax.text(
+            0.9, 0.05,
+            f'{self._ts[0]} [s]',
+            transform=self._ax.transAxes,
+            fontsize=16
+            )
+        self._variable_text = self._ax.text(
+            x=0.85, y=0.72,
+            s=r'$\theta_1: $'+f'{state[0]:.3f}\n'
+                +r'$\theta_2$: '+f'{state[1]:.3f}\n'
+                +r'$\dot{\theta_1}$: '+f'{state[2]:.3f}\n'
+                +r'$\dot{\theta_2}$: '+f'{state[3]:.3f}\n'
+                +r'$u$: '+f'{control[0]:.3f}\n',
+            transform=self._ax.transAxes,
+            fontsize=16
+            )
+        anim = FuncAnimation(
+            self._fig,
+            self._update_animation,
+            frames=self._total_frames,
+            interval=1000*self._dtau*self._skip_rate,
+            blit=True
+            )
+        # save movie
+        if save:
+            anim.save(join(self._log_dir, self._file_name) + '.mp4', dpi=120),
+            writer='pillow',
+            fps=int(1/(self._dtau * self._skip_rate)
+            )
+            print('Animation was saved at ' + self._log_dir + ' .')
+            plt.show()
+
+    def _update_animation(self, i):
+        """ Callback function handed to FuncAnimation.
+        """
+        # current frame
+        frame = i * self._skip_rate
+        state = self._xs[frame, :]
+        control = self._us[frame, :]
+        # link1
+        theta1 = state[0]
+        link1_sx = 0
+        link1_sy = 0
+        link1_tx = link1_sx + self._l1 * np.sin(theta1)
+        link1_ty = link1_sy - self._l1 * np.cos(theta1)
+        self._link1.set_xy([[link1_sx, link1_sy], [link1_tx, link1_ty]])
+        # link2
+        theta2 = state[1]
+        link2_sx = link1_tx
+        link2_sy = link1_ty
+        link2_tx = link2_sx + self._l2 * np.sin(theta1 + theta2)
+        link2_ty = link2_sy - self._l2 * np.cos(theta1 + theta2)
+        self._link2.set_xy([[link2_sx, link2_sy], [link2_tx, link2_ty]])
+        # time text
+        self._time_text.set_text(
+            '{0:.1f} [s]'.format(frame * self._dtau)
+            )
+        # variable text
+        self._variable_text.set_text(
+            r'$\theta_1: $'+f'{state[0]:.3f}\n'
+            +r'$\theta_2$: '+f'{state[1]:.3f}\n'
+            +r'$\dot{\theta}_1$: '+f'{state[2]:.3f}\n'
+            +r'$\dot{\theta}_2$: '+f'{state[3]:.3f}\n'
+            +r'$u$: '+f'{control[0]:.3f}\n',
+            )
+        return self._link1, self._link2
 
 
 # test
