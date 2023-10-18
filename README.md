@@ -37,9 +37,9 @@ In /examples/,
 - hexacopter
 - pendubot
 
-https://github.com/arcuma/ocpy/assets/67198327/b5489ac3-135a-4320-ba95-66a13170ba46
-
-https://github.com/arcuma/ocpy/assets/67198327/8829f420-46f0-4b6c-b0a9-57a556cdf8be
+![cartpole](https://github.com/arcuma/ocpy/assets/67198327/993a40f6-a61c-47ae-9c83-ff5393b514c7)
+![hexacopter](https://github.com/arcuma/ocpy/assets/67198327/5b72074a-f4df-4ff7-abf2-e36f38c094a7)
+![pendubot](https://github.com/arcuma/ocpy/assets/67198327/002f2e13-8079-4d83-a208-8cc161f04c55)
 
 ## References
 1. [D. H. Jacobson and D. Q. Mayne, Differential Dynamic Programming, Elsevier, 1970.](https://doi.org/10.1016/B978-0-12-012710-8.50010-8)

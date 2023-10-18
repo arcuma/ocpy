@@ -40,9 +40,9 @@ class RiccatiRecursionSolver(SolverBase):
 
         self._xs_guess = np.zeros((self._N + 1, self._n_x))
         self._us_guess = np.zeros((self._N, self._n_u))
-        self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
+        self._ss_guess = np.ones((self._N, self._n_g))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
-        self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
+        self._lamss_guess = np.ones((self._N, self._n_g))
 
         self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
         self._ss_opt = np.ones((self._N, self._n_g))
@@ -90,9 +90,7 @@ class RiccatiRecursionSolver(SolverBase):
             assert us_guess.shape == (self._N, self._n_u)
             self._us_guess = us_guess
 
-        if ss_guess is None:
-            self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
-        else:
+        if ss_guess is not None:
             ss_guess = np.asarray(ss_guess, dtype=float)
             assert ss_guess.shape == (self._N, self._n_g)
             self._ss_guess = ss_guess
@@ -102,9 +100,7 @@ class RiccatiRecursionSolver(SolverBase):
             assert lamxs_guess.shape == (self._N + 1, self._n_x)
             self._lamxs_guess = lamxs_guess
 
-        if lamss_guess is None:
-            self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
-        else:
+        if lamss_guess is not None:
             lamss_guess = np.asarray(lamss_guess, dtype=float)
             assert lamss_guess.shape == (self._N, self._n_g)
             self._lamss_guess = lamss_guess
@@ -114,9 +110,9 @@ class RiccatiRecursionSolver(SolverBase):
         """
         self._xs_guess = np.zeros((self._N + 1, self._n_x))
         self._us_guess = np.zeros((self._N, self._n_u))
-        self._ss_guess = self.generate_ss(self._xs_guess, self._us_guess)
+        self._ss_guess = np.ones((self._N, self._n_g))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
-        self._lamss_guess = self.generate_lamss(self._ss_guess, self._mu_init)
+        self._lamss_guess = np.ones((self._N, self._n_g))
     
     def generate_ss(self, xs: np.ndarray, us: np.ndarray):
         """ Reset trajectory of slack variables of inequality constraints.
@@ -197,7 +193,7 @@ class RiccatiRecursionSolver(SolverBase):
 
         # compile
         self.solve(
-            max_iters=3
+            max_iters=1, init_mode=True
         )
 
         print("Initialization done.")
@@ -207,7 +203,7 @@ class RiccatiRecursionSolver(SolverBase):
             update_gamma: bool=False, enable_line_search: bool=False,
             update_mu: bool=True,
             max_iters: int=None, warm_start :bool=False,
-            result=False, log=False, plot=False
+            result=False, log=False, plot=False, init_mode=False
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
@@ -292,30 +288,31 @@ class RiccatiRecursionSolver(SolverBase):
         # number of iterations
         noi = len(cost_hist) - 1
 
-        self._xs_opt = xs
-        self._us_opt = us
-        self._ss_opt = ss
-        self._lamxs_opt = lamxs
-        self._lamss_opt = lamss
-        self._ts = ts
+        if not init_mode:
+            self._xs_opt = xs
+            self._us_opt = us
+            self._ss_opt = ss
+            self._lamxs_opt = lamxs
+            self._lamss_opt = lamss
+            self._ts = ts
 
-        self._result['is_success'] = is_success
-        self._result['noi'] = noi
-        self._result['computation_time'] = computation_time
-        self._result['cost_hist'] = cost_hist
-        self._result['kkt_error_hist'] = kkt_error_hist
-        self._result['kkt_error_mu_hist'] = kkt_error_mu_hist
-        self._result['dyn_error_hist'] = dyn_error_hist
-        self._result['gamma_hist'] = gamma_hist
-        self._result['alpha_hist'] = alpha_hist
-        self._result['mu_hist'] = mu_hist
-        self._result['r_merit_hist'] = r_merit_hist
-        self._result['xs_opt'] = xs
-        self._result['us_opt'] = us
-        self._result['ss_opt'] = ss
-        self._result['lamxs_opt'] = lamxs
-        self._result['lamss_opt'] = lamss
-        self._result['ts'] = ts
+            self._result['is_success'] = is_success
+            self._result['noi'] = noi
+            self._result['computation_time'] = computation_time
+            self._result['cost_hist'] = cost_hist
+            self._result['kkt_error_hist'] = kkt_error_hist
+            self._result['kkt_error_mu_hist'] = kkt_error_mu_hist
+            self._result['dyn_error_hist'] = dyn_error_hist
+            self._result['gamma_hist'] = gamma_hist
+            self._result['alpha_hist'] = alpha_hist
+            self._result['mu_hist'] = mu_hist
+            self._result['r_merit_hist'] = r_merit_hist
+            self._result['xs_opt'] = xs
+            self._result['us_opt'] = us
+            self._result['ss_opt'] = ss
+            self._result['lamxs_opt'] = lamxs
+            self._result['lamss_opt'] = lamss
+            self._result['ts'] = ts
 
         # results
         if result:
@@ -758,7 +755,7 @@ def backward_recursion(
 
         Ks[i] = -G_inv @ H
         ks[i] = -G_inv @ (Bs[i].T @ (Ps[i + 1] @ x_bars[i] + ps[i + 1]) + lu_bars[i])
- 
+
         Ps[i] = F - Ks[i].T @ G @ Ks[i]
         ps[i] = As[i].T @ (ps[i + 1] + Ps[i + 1] @ x_bars[i]) + lx_bars[i] + H.T @ ks[i]
         
@@ -830,7 +827,7 @@ def line_search(
         f, l, lx, lu, lf, lfx, g, t0, x0, dt, 
         xs, us, ss, dxs, dus, dss, mu, r_merit
     )
- 
+
     # fraction to the boundary rule
     for i in range(N):
 
