@@ -93,7 +93,7 @@ class UCRRSolver(SolverBase):
 
         # compile
         self.solve(
-            max_iters=3
+            max_iters=1, init_mode=True
         )
 
         print("Initialization done.")
@@ -102,7 +102,7 @@ class UCRRSolver(SolverBase):
             self,
             update_gamma: bool=False, enable_line_search: bool=False,
             max_iters: int=None, warm_start :bool=False,
-            result=False, log=False, plot=False
+            result=False, log=False, plot=False, init_mode=False
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
@@ -175,24 +175,25 @@ class UCRRSolver(SolverBase):
         # number of iterations
         noi = len(cost_hist) - 1
 
-        self._xs_opt = xs
-        self._us_opt = us
-        self._lamxs_opt = lamxs
-        self._ts = ts
+        if not init_mode:
+            self._xs_opt = xs
+            self._us_opt = us
+            self._lamxs_opt = lamxs
+            self._ts = ts
 
-        self._result['is_success'] = is_success
-        self._result['noi'] = noi
-        self._result['computation_time'] = computation_time
-        self._result['cost_hist'] = cost_hist
-        self._result['kkt_error_hist'] = kkt_error_hist
-        self._result['dyn_error_hist'] = dyn_error_hist
-        self._result['gamma_hist'] = gamma_hist
-        self._result['alpha_hist'] = alpha_hist
-        self._result['r_merit_hist'] = r_merit_hist
-        self._result['xs_opt'] = xs
-        self._result['us_opt'] = us
-        self._result['lamxs_opt'] = lamxs
-        self._result['ts'] = ts
+            self._result['is_success'] = is_success
+            self._result['noi'] = noi
+            self._result['computation_time'] = computation_time
+            self._result['cost_hist'] = cost_hist
+            self._result['kkt_error_hist'] = kkt_error_hist
+            self._result['dyn_error_hist'] = dyn_error_hist
+            self._result['gamma_hist'] = gamma_hist
+            self._result['alpha_hist'] = alpha_hist
+            self._result['r_merit_hist'] = r_merit_hist
+            self._result['xs_opt'] = xs
+            self._result['us_opt'] = us
+            self._result['lamxs_opt'] = lamxs
+            self._result['ts'] = ts
 
         # results
         if result:

@@ -72,15 +72,15 @@ class DDPSolver(SolverBase):
         print("Initializing solver...")
 
         # compile
-        self.solve(max_iters=3)
+        self.solve(max_iters=1, init_mode=True)
 
         print("Initialization done.")
 
     def solve(
             self,
             update_gamma: bool=False, enable_line_search: bool=True,
-            max_iters: int=None, warm_start: bool=False,
-            result: bool=False, log: bool=False, plot: bool=False
+            max_iters: int=None, warm_start=False,
+            result=False, log=False, plot=False, init_mode=False
         ):
         """ Solve OCP via DDP iteration.
 
@@ -148,20 +148,20 @@ class DDPSolver(SolverBase):
 
         # number of iterations
         noi = len(cost_hist) - 1
+        if not init_mode:
+            self._xs_opt = xs
+            self._us_opt = us
+            self._ts = ts
 
-        self._xs_opt = xs
-        self._us_opt = us
-        self._ts = ts
-
-        self._result['is_success'] = is_success
-        self._result['noi'] = noi
-        self._result['computation_time'] = computation_time
-        self._result['cost_hist'] = cost_hist
-        self._result['gamma_hist'] = gamma_hist
-        self._result['alpha_hist'] = alpha_hist
-        self._result['xs_opt'] = xs
-        self._result['us_opt'] = us
-        self._result['ts'] = ts
+            self._result['is_success'] = is_success
+            self._result['noi'] = noi
+            self._result['computation_time'] = computation_time
+            self._result['cost_hist'] = cost_hist
+            self._result['gamma_hist'] = gamma_hist
+            self._result['alpha_hist'] = alpha_hist
+            self._result['xs_opt'] = xs
+            self._result['us_opt'] = us
+            self._result['ts'] = ts
 
         # result
         if result:
