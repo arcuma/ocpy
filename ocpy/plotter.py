@@ -90,7 +90,6 @@ class Plotter:
 
         return Plotter(log_dir, xs, us, ts, costs, kkts)
 
-    
     def plot(
             self, fig_scale=4.0, font_scale_label=2.0, font_scale_ticks=1.3,
             wspace_scale=1.0, hspace_scale=2.3,

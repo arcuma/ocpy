@@ -61,11 +61,11 @@ class SolverBase(abc.ABC):
         self._initialized = False
 
         # optimal trajectory
-        self._xs_opt = np.ndarray(0)
-        self._us_opt = np.ndarray(0)
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
 
         # time grids
-        self._ts = np.ndarray(0)
+        ts = np.array([self._t0 + i*self._dt for i in range(self._N + 1)])
 
         # result (success flag, NoI, ...)
         self._result = {}

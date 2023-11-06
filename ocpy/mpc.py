@@ -126,7 +126,7 @@ class MPC:
                 us_real.append(u)
 
             solver.set_initial_condition(t, x)
-            solver.solve(warm_start=True, update_gamma=False,
+            solver.solve(from_opt=True, update_gamma=False,
                          enable_line_search=self._enable_line_search,
                          max_iters=max_iters_mpc)
 

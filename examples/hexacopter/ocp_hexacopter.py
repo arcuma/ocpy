@@ -34,27 +34,34 @@ def ocp_hexacopter_unconstrained(constrain: str=None, mu=1e-2):
     )
 
     # Symbolic expressions of constants.
+    # q = ocp.define_vector_constant(
+    #     'q',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+    # q_f = ocp.define_vector_constant(
+    #     'q_{f}',  [1, 1, 1, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     q = ocp.define_vector_constant(
-        'q',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+        'q',  [20, 20, 20, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     r = ocp.define_vector_constant(
         'r',  [0.01, 0.01, 0.01, 0.01, 0.01, 0.01])
     q_f = ocp.define_vector_constant(
-        'q_{f}',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+        'q_{f}',  [20, 20, 20, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     Q = symutils.diag(q)
     R = symutils.diag(r)
     Q_f = symutils.diag(q_f)
 
     # Reference position and velocity.
     p_ref = ocp.get_zero_vector(3)
-    p_ref[0] = sin(2*t)
-    p_ref[1] = 1 - cos(2*t)
-    p_ref[2] = z_ref + 2*sin(2*t)
+    # p_ref[0] = sin(2*t)
+    # p_ref[1] = 1 - cos(2*t)
+    # p_ref[2] = z_ref + 2*sin(2*t)
+    p_ref[0] = 2*sin(2*t)
+    p_ref[1] = 1*sin(4*t)
+    p_ref[2] = z_ref
     p_ref_diff = p_ref.diff(t)
 
     # Reference state
     x_ref = ocp.get_zero_vector(n_x)
     x_ref[0:3, :] = p_ref
-    x_ref[3:6, :] = p_ref_diff
+    x_ref[6:9, :] = p_ref_diff
 
     # Input
     U1 = sum(u[i] for i in range(n_u))
@@ -135,27 +142,34 @@ def ocp_hexacopter():
     )
 
     # Symbolic expressions of constants.
+    # q = ocp.define_vector_constant(
+    #     'q',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+    # q_f = ocp.define_vector_constant(
+    #     'q_{f}',  [1, 1, 1, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     q = ocp.define_vector_constant(
-        'q',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+        'q',  [20, 20, 20, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     r = ocp.define_vector_constant(
         'r',  [0.01, 0.01, 0.01, 0.01, 0.01, 0.01])
     q_f = ocp.define_vector_constant(
-        'q_{f}',  [1, 1, 1, 0.01, 0.01, 0, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
+        'q_{f}',  [20, 20, 20, 0.01, 0.01, 1, 0.01, 0.01, 0.01, 0.1, 0.1, 0.001])
     Q = symutils.diag(q)
     R = symutils.diag(r)
     Q_f = symutils.diag(q_f)
 
     # Reference position and velocity.
     p_ref = ocp.get_zero_vector(3)
-    p_ref[0] = sin(2*t)
-    p_ref[1] = 1 - cos(2*t)
-    p_ref[2] = z_ref + 2*sin(2*t)
+    # p_ref[0] = sin(2*t)
+    # p_ref[1] = 1 - cos(2*t)
+    # p_ref[2] = z_ref + 2*sin(2*t)
+    p_ref[0] = 2*sin(2*t)
+    p_ref[1] = 1*sin(4*t)
+    p_ref[2] = z_ref
     p_ref_diff = p_ref.diff(t)
 
     # Reference state
     x_ref = ocp.get_zero_vector(n_x)
     x_ref[0:3, :] = p_ref
-    x_ref[3:6, :] = p_ref_diff
+    x_ref[6:9, :] = p_ref_diff
 
     # Input
     U1 = sum(u[i] for i in range(n_u))

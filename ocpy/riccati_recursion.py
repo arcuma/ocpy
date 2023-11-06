@@ -10,6 +10,8 @@ from ocpy.logger import Logger
 from ocpy.plotter import Plotter
 from ocpy.solverbase import SolverBase
 
+numba.config.DISABLE_JIT = False
+
 
 class RiccatiRecursionSolver(SolverBase):
     """ Riccati Recursion Solver. Problem is formulated by \
@@ -44,6 +46,8 @@ class RiccatiRecursionSolver(SolverBase):
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
         self._lamss_guess = np.ones((self._N, self._n_g))
 
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
         self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
         self._ss_opt = np.ones((self._N, self._n_g))
         self._lamss_opt = np.ones((self._N, self._n_g))
@@ -69,7 +73,7 @@ class RiccatiRecursionSolver(SolverBase):
     def set_guess(self, xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
                   ss_guess: np.ndarray=None,
                   lamxs_guess: np.ndarray=None, lamss_guess: np.ndarray=None):
-        """ Set initial guess of xs, us, and lamxs.
+        """ Set initial guess of variables.
 
         Args:
             xs_guess (np.ndarray): Guess of state trajectory. (N + 1)*n_x.
@@ -186,14 +190,61 @@ class RiccatiRecursionSolver(SolverBase):
         if mu_min is not None:
             self._mu_min = mu_min
 
-    def init_solver(self):
+    def print_result(self):
+        """ Print summary of result.
+        """
+        is_success = self._result['is_success']
+        if is_success:
+            status = 'success'
+        else:
+            status = 'failure'
+        noi = self._result['noi']
+        computation_time = self._result['computation_time']
+        cost = self._result['cost_hist'][-1]
+        kkt_error = self._result['kkt_error_hist'][-1]
+
+        print('------------------- RESULT -------------------')
+        print(f'solver: {self._solver_name}')
+        print(f'status: {status}')
+        print(f'number of iterations: {noi}')
+        print(f'computation time: {computation_time:.6f} [s]')
+        if noi >= 1:
+            print(f'per update : {computation_time / noi:.6f} [s]')
+        print(f'final cost value: {cost:.8f}')
+        print(f'final KKT error: {kkt_error:.8f}')
+        print('----------------------------------------------')
+
+    def log_data(self):
+        """ Log data to self._log_dir.
+        """
+        cost_hist = self._result['cost_hist']
+        kkt_error_hist = self._result['kkt_error_hist']
+
+        logger = Logger(self._log_dir)
+        logger.save(self._xs_opt, self._us_opt, self._ts,
+                    cost_hist, kkt_error_hist)
+
+    def plot_data(self, save=True):
+        """ Plot data.
+
+        Args:
+            save (bool): If True, graph is saved.
+        """
+        cost_hist = self._result['cost_hist']
+        kkt_error_hist = self._result['kkt_error_hist']
+
+        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
+                          cost_hist, kkt_error_hist)
+        plotter.plot(save=save)
+
+    def init_solver(self, max_iters=1, save_result=False):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
         self.solve(
-            max_iters=1, init_mode=True
+            max_iters=max_iters, save_result=save_result
         )
 
         print("Initialization done.")
@@ -202,8 +253,8 @@ class RiccatiRecursionSolver(SolverBase):
             self,
             update_gamma: bool=False, enable_line_search: bool=False,
             update_mu: bool=True,
-            max_iters: int=None, warm_start :bool=False,
-            result=False, log=False, plot=False, init_mode=False
+            max_iters: int=None, from_opt :bool=False,
+            result=False, log=False, plot=False, save_result=True
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
@@ -213,11 +264,12 @@ class RiccatiRecursionSolver(SolverBase):
             update_mu (bool=True): If True, barrier parameter is updated \
                 while iteration.
             max_iters (int): Number of max iterations.
-            warm_start (bool=False): If true, previous solution is used \
+            from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
+            save_result (bool): If true, results are saved.
         
         Returns:
             ts (np.ndarray): Discretized Time at each stage.
@@ -244,7 +296,7 @@ class RiccatiRecursionSolver(SolverBase):
         if max_iters is None:
             max_iters = self._max_iters
 
-        if warm_start is True:
+        if from_opt is True:
             xs_guess = self._xs_opt
             us_guess = self._us_opt
             ss_guess = self._ss_opt
@@ -268,8 +320,8 @@ class RiccatiRecursionSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, ss, lamxs, lamss, ts, is_success,\
-        cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
+        xs, us, ss, lamxs, lamss, ts, \
+        is_success, cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
         gamma_hist, alpha_hist, mu_hist, r_merit_hist = self._solve(
                 f, fx, fu,
                 l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
@@ -288,7 +340,7 @@ class RiccatiRecursionSolver(SolverBase):
         # number of iterations
         noi = len(cost_hist) - 1
 
-        if not init_mode:
+        if save_result:
             self._xs_opt = xs
             self._us_opt = us
             self._ss_opt = ss
@@ -491,57 +543,10 @@ class RiccatiRecursionSolver(SolverBase):
         mu_hist = mu_hist[0: iters + 1]
         r_merit_hist = r_merit_hist[0: iters + 1]
 
-        return (xs, us, ss, lamxs, lamss, ts, is_success,
+        return (xs, us, ss, lamxs, lamss, ts, 
+                is_success,
                 cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,
                 gamma_hist, alpha_hist, mu_hist, r_merit_hist)
-
-    def print_result(self):
-        """ Print summary of result.
-        """
-        is_success = self._result['is_success']
-        if is_success:
-            status = 'success'
-        else:
-            status = 'failure'
-        noi = self._result['noi']
-        computation_time = self._result['computation_time']
-        cost = self._result['cost_hist'][-1]
-        kkt_error = self._result['kkt_error_hist'][-1]
-
-        print('------------------- RESULT -------------------')
-        print(f'solver: {self._solver_name}')
-        print(f'status: {status}')
-        print(f'number of iterations: {noi}')
-        print(f'computation time: {computation_time:.6f} [s]')
-        if noi >= 1:
-            print(f'per update : {computation_time / noi:.6f} [s]')
-        print(f'final cost value: {cost:.8f}')
-        print(f'final KKT error: {kkt_error:.8f}')
-        print('----------------------------------------------')
-
-
-    def log_data(self):
-        """ Log data to self._log_dir.
-        """
-        cost_hist = self._result['cost_hist']
-        kkt_error_hist = self._result['kkt_error_hist']
-
-        logger = Logger(self._log_dir)
-        logger.save(self._xs_opt, self._us_opt, self._ts,
-                    cost_hist, kkt_error_hist)
-
-    def plot_data(self, save=True):
-        """ Plot data.
-
-        Args:
-            save (bool): If True, graph is saved.
-        """
-        cost_hist = self._result['cost_hist']
-        kkt_error_hist = self._result['kkt_error_hist']
-
-        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
-                          cost_hist, kkt_error_hist)
-        plotter.plot(save=save)
 
 
 @numba.njit
