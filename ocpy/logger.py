@@ -59,4 +59,3 @@ class Logger:
         print("Data are saved at " + log_dir)
 
         return log_dir
-        

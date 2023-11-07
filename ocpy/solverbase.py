@@ -43,17 +43,21 @@ class SolverBase(abc.ABC):
         self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
             self._lf, self._lfx, self._lfxx = self._dl
 
-        # stepsize parameter
+        # line search parameter
+        self._enable_line_search = True
         self._alpha_min = 1e-4
         self._r_alpha = 0.5
 
         # regularization value.
+        self._fix_gamma = True
         self._gamma_init = 0.0
-        self._r_gamma = 5.0
+        self._r_gamma = 10.0
         self._gamma_min = 0.0
-        self._gamma_max = 0.0
+        self._gamma_max = 1e3
 
         # solver parameters
+        self._fix_iters = False
+        self._min_iters = 1
         self._max_iters = 1000
 
         # flag
@@ -61,11 +65,11 @@ class SolverBase(abc.ABC):
         self._initialized = False
 
         # optimal trajectory
-        self._xs_opt = np.ndarray(0)
-        self._us_opt = np.ndarray(0)
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
 
         # time grids
-        self._ts = np.ndarray(0)
+        ts = np.array([self._t0 + i*self._dt for i in range(self._N + 1)])
 
         # result (success flag, NoI, ...)
         self._result = {}
@@ -98,8 +102,9 @@ class SolverBase(abc.ABC):
         """
         return self._log_dir
     
-    def set_regularization_param(self, gamma_init: float=None, r_gamma: float=None,
-                                 gamma_min: float=None, gamma_max: float=None):
+    def set_regularization_param(
+            self, gamma_init: float=None, r_gamma: float=None,
+            gamma_min: float=None, gamma_max: float=None, fix_gamma: bool=None):
         """ Set regularization parameters of Newton method.
         
         Args: 
@@ -107,6 +112,7 @@ class SolverBase(abc.ABC):
             r_gamma (float >= 1): Increasing/decreasing factor of gamma.
             gamma_min (float): Minimum value of gamma.
             gamma_max (float): Maximum value of gamma.
+            fix_gamma (bool): If fix gamma or not.
         """
         if gamma_init is not None:
             self._gamma_init = gamma_init
@@ -116,25 +122,36 @@ class SolverBase(abc.ABC):
             self._gamma_min = gamma_min
         if gamma_max is not None:
             self._gamma_max = gamma_max
+        if fix_gamma is not None:
+            self._fix_gamma = fix_gamma
 
-    def set_line_search_param(self, alpha_min: float=None, r_alpha: float=None):
+    def set_line_search_param(
+            self, alpha_min: float=None, r_alpha: float=None,
+            enable_line_search: bool=True):
         """ Set parameters related to line search.
 
         Args:
             alpha_min (float): Minimum stepsize.
             r_alpha (float): Update ratio of alpha. Must be (0, 1).
+            enable_line_search (bool): If enable line_search or not.
         """
         if alpha_min is not None:
             self._alpha_min = alpha_min
         if r_alpha is not None:
             self._r_alpha = r_alpha
+        if enable_line_search is not None:
+            self._enable_line_search = enable_line_search
 
-    def set_max_iters(self, max_iters: int=None):
+    def set_iters_param(self, min_iters: int=None, max_iters: int=None):
         """ Set number of maximum iteration.
         
         Args: 
+            min_iters (int): Number of minimum iteration.
             max_iters (int): Number of maximum iteration.
         """
+        if min_iters is not None:
+            assert min_iters >= 0
+            self._min_iters = min_iters
         if max_iters is not None:
             assert max_iters > 0
             self._max_iters = max_iters
@@ -171,9 +188,12 @@ class SolverBase(abc.ABC):
             assert N > 0
             self._N = N
         self._dt = self._T / self._N
+
+        self.reset_guess()
+        self.reset_opt()
+
         print("Method set_horizon(T, N) was called.")
-        print("If you changed horizon parameters, do not forget to call "
-              "set_guess() or reset_guess() to change initial guess.")
+        print("Guess and solution were reset automatically.")
 
     def get_xs_opt(self):
         """ Get optimal state trajectory.
@@ -210,7 +230,13 @@ class SolverBase(abc.ABC):
         """ Reset guess.
         """
         pass
- 
+
+    @abc.abstractmethod
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        pass
+
     @abc.abstractmethod
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().

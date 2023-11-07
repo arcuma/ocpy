@@ -10,6 +10,8 @@ from ocpy.logger import Logger
 from ocpy.plotter import Plotter
 from ocpy.solverbase import SolverBase
 
+numba.config.DISABLE_JIT = False
+
 
 class DDPSolver(SolverBase):
     """ Differential Dynamic Programming(DDP) solver.
@@ -31,6 +33,9 @@ class DDPSolver(SolverBase):
 
         self._us_guess = np.zeros((self._N, self._n_u))
 
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
+
         self._result['cost_hist'] = None
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
@@ -42,7 +47,7 @@ class DDPSolver(SolverBase):
             self.init_solver()
 
     def set_guess(self, us_guess: np.ndarray=None):
-        """ Set initial guess of input trajectory.
+        """ Set initial guess of variables.
 
         Args:
             us_guess (np.ndarray): Guess of input trajectory. N*n_u.
@@ -56,6 +61,12 @@ class DDPSolver(SolverBase):
         """ Reset guess to zero.
         """
         self._us_guess = np.zeros((self._N, self._n_u))
+    
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        self._us_opt = np.zeros((self._N, self._n_u))
+        self._xs_opt = np.zeros((self._N, self._n_x))
 
     def set_stop_tol(self, stop_tol: float=None):
         """ Set stop tolerance.
@@ -66,21 +77,60 @@ class DDPSolver(SolverBase):
         if stop_tol is not None:
             self._stop_tol = stop_tol
 
+    def print_result(self):
+        """ Print summary of result.
+        """
+        is_success = self._result['is_success']
+        if is_success:
+            status = 'success'
+        else:
+            status = 'failure'
+        noi = self._result['noi']
+        computation_time = self._result['computation_time']
+        cost = self._result['cost_hist'][-1]
+
+        print('------------------- RESULT -------------------')
+        print(f'solver: {self._solver_name}')
+        print(f'status: {status}')
+        print(f'number of iterations: {noi}')
+        print(f'computation time: {computation_time:.6f} [s]')
+        if noi >= 1:
+            print(f'per update : {computation_time / noi:.6f} [s]')
+        print(f'final cost value: {cost: .8f}')
+        print('----------------------------------------------')
+    
+    def log_data(self):
+        """ Log data to self._log_dir.
+        """
+
+        logger = Logger(self._log_dir)
+        logger.save(self._xs_opt, self._us_opt, self._ts,
+                    self._result['cost_hist'])
+
+    def plot_data(self, save=True):
+        """ Plot data.
+        """
+        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
+                          self._result['cost_hist'])
+        plotter.plot(save=save)
+
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
-        self.solve(max_iters=1, init_mode=True)
+        max_iters_eva = self._max_iters
+        self._max_iters = 1
+        self.solve(save_result=False)
+        self._max_iters = max_iters_eva
 
         print("Initialization done.")
 
     def solve(
             self,
-            update_gamma: bool=False, enable_line_search: bool=True,
-            max_iters: int=None, warm_start=False,
-            result=False, log=False, plot=False, init_mode=False
+            from_opt=False,
+            result=False, log=False, plot=False, save_result=True
         ):
         """ Solve OCP via DDP iteration.
 
@@ -88,11 +138,12 @@ class DDPSolver(SolverBase):
             update_gamma (bool): If True, regularization coefficient is updated.
             enable_line_search (bool=True): If true, enable line searching.
             max_iters (int): Maximum numbar of iterations.
-            warm_start (bool=False): If true, previous solution is used \
+            from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated (and saved if log==True).
+            save_result (bool): If true, results are saved.
         
         Returns:
             xs (np.ndarray): optimal state trajectory. (N + 1) * n_x
@@ -100,26 +151,7 @@ class DDPSolver(SolverBase):
             ts (np.ndarray): Discretized Time at each stage.
             is_success (bool): Success or not.
         """
-        if update_gamma:
-            gamma_init = self._gamma_init
-            r_gamma = self._r_gamma
-            gamma_min = self._gamma_min
-            gamma_max = self._gamma_max
-        else:
-            gamma_init =  gamma_min = gamma_max = self._gamma_init
-            r_gamma = 1.0
-
-        if enable_line_search:
-            alpha_min = self._alpha_min
-            r_alpha = self._r_alpha
-        else:
-            alpha_min = 1.0
-            r_alpha = self._r_alpha
-
-        if max_iters is None:
-            max_iters = self._max_iters
-
-        if warm_start is True:
+        if from_opt is True:
             us_guess = self._us_opt
         else:
             us_guess = self._us_guess
@@ -134,13 +166,15 @@ class DDPSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
+        xs, us, ts, \
+        is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
             us_guess,
-            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-            self._stop_tol, max_iters, self._is_ddp
+            self._gamma_init, self._r_gamma, self._gamma_min, self._gamma_max, self._fix_gamma,
+            self._alpha_min, self._r_alpha, self._enable_line_search,
+            self._stop_tol, self._min_iters, self._max_iters, self._is_ddp
         )
 
         time_end = time.perf_counter()
@@ -148,7 +182,7 @@ class DDPSolver(SolverBase):
 
         # number of iterations
         noi = len(cost_hist) - 1
-        if not init_mode:
+        if save_result:
             self._xs_opt = xs
             self._us_opt = us
             self._ts = ts
@@ -179,8 +213,9 @@ class DDPSolver(SolverBase):
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             t0, x0, T, N, us_guess,
-            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-            stop_tol, max_iters, is_ddp
+            gamma_init, r_gamma, gamma_min, gamma_max, fix_gamma,
+            alpha_min, r_alpha, enable_line_search,
+            stop_tol, min_iters, max_iters, is_ddp
         ):
         """ DDP algorithm.
 
@@ -219,13 +254,17 @@ class DDPSolver(SolverBase):
                 gamma, is_ddp
             )
 
+            # stop criterion
             if np.abs(delta_V) < stop_tol:
                 is_success = True
+
+            if is_success and iters > min_iters:
                 iters -= 1
                 break
             
             # step size
             alpha = 1.0
+            success_line_search = False
 
             # line search
             while True:
@@ -236,26 +275,31 @@ class DDPSolver(SolverBase):
                     ks, Ks, alpha
                 )
 
-                # stop line search condition
+                # stop condition of line search
                 if cost_new < cost:
-                    gamma /= r_gamma
+                    success_line_search = True
                     break
 
-                if alpha < alpha_min:
-                    gamma *= r_gamma
+                if (not enable_line_search) or (alpha < alpha_min):
                     break
                 
                 # update alpha
                 alpha *= r_alpha
+
+            # modify regularization coefficient
+            if not fix_gamma:
+                if success_line_search:
+                    gamma *= r_gamma
+                else:
+                    gamma /= r_gamma
+                # clip gamma
+                gamma = min(max(gamma, gamma_min), gamma_max)
 
             # update trajectory
             xs = xs_new
             us = us_new
             cost = cost_new
     
-            # clip gamma
-            gamma = min(max(gamma, gamma_min), gamma_max)
-
             cost_hist[iters] = cost
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
@@ -265,45 +309,9 @@ class DDPSolver(SolverBase):
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
 
-        return xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist
+        return (xs, us, ts, 
+                is_success, cost_hist, gamma_hist, alpha_hist)
 
-    def print_result(self):
-        """ Print summary of result.
-        """
-        is_success = self._result['is_success']
-        if is_success:
-            status = 'success'
-        else:
-            status = 'failure'
-        noi = self._result['noi']
-        computation_time = self._result['computation_time']
-        cost = self._result['cost_hist'][-1]
-
-        print('------------------- RESULT -------------------')
-        print(f'solver: {self._solver_name}')
-        print(f'status: {status}')
-        print(f'number of iterations: {noi}')
-        print(f'computation time: {computation_time:.6f} [s]')
-        if noi >= 1:
-            print(f'per update : {computation_time / noi:.6f} [s]')
-        print(f'final cost value: {cost: .8f}')
-        print('----------------------------------------------')
-    
-    def log_data(self):
-        """ Log data to self._log_dir.
-        """
-
-        logger = Logger(self._log_dir)
-        logger.save(self._xs_opt, self._us_opt, self._ts,
-                    self._result['cost_hist'])
-
-    def plot_data(self, save=True):
-        """ Plot data.
-        """
-        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
-                          self._result['cost_hist'])
-        plotter.plot(save=save)
-        
 
 #### DDP FUNCTIONS ####
 @numba.njit
@@ -330,6 +338,7 @@ def rollout(f, l, lf, t0: float, x0: np.ndarray, dt: float, us: np.ndarray):
     cost += lf(xs[N], t0 + i*N)
     return xs, cost
 
+
 @numba.njit
 def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
     """ Tensor dot product between 1d vector and 3d tensor, contraction\
@@ -350,6 +359,7 @@ def vector_dot_tensor(Vx: np.ndarray, fab: np.ndarray):
             for k in range(n_a):
                 Vxfab[i][k] += Vx[j] * fab[i][j][k]
     return Vxfab
+
 
 @numba.njit
 def backward_pass(fx, fu, fxx, fux, fuu, 
@@ -450,6 +460,7 @@ def backward_pass(fx, fu, fxx, fux, fuu,
         delta_V += delta_V_i
 
     return ks, Ks, delta_V
+
 
 @numba.njit
 def forward_pass(f, l, lf, 

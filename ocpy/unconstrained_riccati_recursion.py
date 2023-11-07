@@ -10,6 +10,8 @@ from ocpy.logger import Logger
 from ocpy.plotter import Plotter
 from ocpy.solverbase import SolverBase
 
+numba.config.DISABLE_JIT = False
+
 
 class UCRRSolver(SolverBase):
     """ Unconstrained Riccati Recursion Solver. Problem is formulated by \
@@ -31,6 +33,8 @@ class UCRRSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
 
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
         self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
 
         self._result['cost_hist'] = None
@@ -49,7 +53,7 @@ class UCRRSolver(SolverBase):
 
     def set_guess(self, xs_guess: np.ndarray=None ,us_guess: np.ndarray=None,
                   lamxs_guess: np.ndarray=None):
-        """ Set initial guess of xs, us, and lamxs.
+        """ Set initial guess of variables.
 
         Args:
             xs_guess (np.ndarray): Guess of state trajectory. (N + 1)*n_x.
@@ -60,10 +64,12 @@ class UCRRSolver(SolverBase):
             us_guess = np.asarray(us_guess, dtype=float)
             assert us_guess.shape == (self._N, self._n_u)
             self._us_guess = us_guess
+
         if xs_guess is not None:
             xs_guess = np.asarray(xs_guess, dtype=float)
             assert xs_guess.shape == (self._N + 1, self._n_x)
             self._xs_guess = xs_guess
+
         if lamxs_guess is not None:
             lamxs_guess = np.asarray(lamxs_guess, dtype=float)
             assert lamxs_guess.shape == (self._N + 1, self._n_x)
@@ -76,6 +82,13 @@ class UCRRSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
 
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
+        self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
+
     def set_kkt_tol(self, kkt_tol: float=None):
         """ Set stop criterion. 
 
@@ -86,34 +99,83 @@ class UCRRSolver(SolverBase):
             assert kkt_tol > 0
             self._kkt_tol = kkt_tol
 
+    def print_result(self):
+        """ Print summary of result.
+        """
+        is_success = self._result['is_success']
+        if is_success:
+            status = 'success'
+        else:
+            status = 'failure'
+        noi = self._result['noi']
+        computation_time = self._result['computation_time']
+        cost = self._result['cost_hist'][-1]
+        kkt_error = self._result['kkt_error_hist'][-1]
+
+        print('------------------- RESULT -------------------')
+        print(f'solver: {self._solver_name}')
+        print(f'status: {status}')
+        print(f'number of iterations: {noi}')
+        print(f'computation time: {computation_time:.6f} [s]')
+        if noi >= 1:
+            print(f'per update : {computation_time / noi:.6f} [s]')
+        print(f'final cost value: {cost:.8f}')
+        print(f'final KKT error: {kkt_error:.8f}')
+        print('----------------------------------------------')
+
+    def log_data(self):
+        """ Log data to self._log_dir.
+        """
+        cost_hist = self._result['cost_hist']
+        kkt_error_hist = self._result['kkt_error_hist']
+
+        logger = Logger(self._log_dir)
+        logger.save(self._xs_opt, self._us_opt, self._ts,
+                    cost_hist, kkt_error_hist)
+
+    def plot_data(self, save=True):
+        """ Plot data.
+
+        Args:
+            save (bool): If True, graph is saved.
+        """
+        cost_hist = self._result['cost_hist']
+        kkt_error_hist = self._result['kkt_error_hist']
+
+        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
+                          cost_hist, kkt_error_hist)
+        plotter.plot(save=save)
+
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
-        self.solve(
-            max_iters=1, init_mode=True
-        )
+        max_iters_eva = self._max_iters
+        self._max_iters = 1
+        self.solve(save_result=False)
+        self._max_iters = max_iters_eva
 
         print("Initialization done.")
 
     def solve(
             self,
-            update_gamma: bool=False, enable_line_search: bool=False,
-            max_iters: int=None, warm_start :bool=False,
-            result=False, log=False, plot=False, init_mode=False
+            from_opt=False, save_result=True,
+            result=False, log=False, plot=False
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
         Args:
             update_gamma (bool): If True, regularization coefficient is updated.
             enable_line_search (bool=True): If true, enable line search.
-            warm_start (bool=False): If true, previous solution is used \
+            max_iters (int): Number of max iterations.
+            from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
+            save_result (bool): If true, results are saved.
         
         Returns:
             ts (np.ndarray): Discretized Time at each stage.
@@ -121,26 +183,7 @@ class UCRRSolver(SolverBase):
             us (np.ndarray): Optimal control trajectory. N * n_u.
             is_success (bool): Success or not.
         """
-        if update_gamma:
-            gamma_init = self._gamma_init
-            r_gamma = self._r_gamma
-            gamma_min = self._gamma_min
-            gamma_max = self._gamma_max
-        else:
-            gamma_init =  gamma_min = gamma_max = self._gamma_init
-            r_gamma = 1.0
-
-        if enable_line_search:
-            alpha_min = self._alpha_min
-            r_alpha = self._r_alpha
-        else:
-            alpha_min = 1.0
-            r_alpha = self._r_alpha
-
-        if max_iters is None:
-            max_iters = self._max_iters
-
-        if warm_start is True:
+        if from_opt is True:
             xs_guess = self._xs_opt
             us_guess = self._us_opt
             lamxs_guess = self._lamxs_opt
@@ -159,14 +202,16 @@ class UCRRSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, lamxs, ts, is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
+        xs, us, lamxs, ts, \
+        is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
         gamma_hist, alpha_hist, r_merit_hist = self._solve(
-                f, fx, fu,
-                l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-                self._t0, self._x0, self._T, self._N, 
-                xs_guess, us_guess, lamxs_guess,
-                gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-                self._kkt_tol, max_iters
+            f, fx, fu,
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            self._t0, self._x0, self._T, self._N, 
+            xs_guess, us_guess, lamxs_guess,
+            self._gamma_init, self._r_gamma, self._gamma_min, self._gamma_max, self._fix_gamma,
+            self._alpha_min, self._r_alpha, self._enable_line_search,
+            self._kkt_tol, self._min_iters, self._max_iters
         )
 
         time_end = time.perf_counter()
@@ -175,7 +220,7 @@ class UCRRSolver(SolverBase):
         # number of iterations
         noi = len(cost_hist) - 1
 
-        if not init_mode:
+        if save_result:
             self._xs_opt = xs
             self._us_opt = us
             self._lamxs_opt = lamxs
@@ -207,12 +252,15 @@ class UCRRSolver(SolverBase):
 
     @staticmethod
     @numba.njit
-    def _solve(f, fx, fu, 
-               l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-               t0, x0, T, N,
-               xs, us, lamxs,
-               gamma_init, r_gamma, gamma_min, gamma_max,
-               alpha_min, r_alpha, kkt_tol, max_iters):
+    def _solve(
+            f, fx, fu, 
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            t0, x0, T, N,
+            xs, us, lamxs,
+            gamma_init, r_gamma, gamma_min, gamma_max, fix_gamma,
+            alpha_min, r_alpha, enable_line_search,
+            kkt_tol, min_iters, max_iters
+        ):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lamxs, ts, is_success,
@@ -260,8 +308,11 @@ class UCRRSolver(SolverBase):
 
         for iters in range(1, max_iters + 1):
 
+            # stop condition
             if kkt_error < kkt_tol:
                 is_success = True
+
+            if iters > min_iters and is_success:
                 iters -= 1
                 break
 
@@ -289,20 +340,21 @@ class UCRRSolver(SolverBase):
                 = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
                     xs, us, lamxs, dxs, dus, dlamxs,
-                    alpha_min, r_alpha, cost, kkt_error, r_merit
+                    alpha_min, r_alpha, enable_line_search,
+                    cost, kkt_error, r_merit
             )
 
             # evaluate dynamics feasibility
             dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
             # modify regularization coefficient
-            if kkt_error_new < kkt_error:
-                gamma /= r_gamma
-            else:
-                gamma *= r_gamma
-
-            # clip gamma
-            gamma = min(max(gamma, gamma_min), gamma_max)
+            if not fix_gamma:
+                if alpha > alpha_min:
+                    gamma /= r_gamma
+                else:
+                    gamma *= r_gamma
+                # clip gamma
+                gamma = min(max(gamma, gamma_min), gamma_max)
 
             # update variables.
             xs = xs_new
@@ -329,57 +381,9 @@ class UCRRSolver(SolverBase):
         alpha_hist = alpha_hist[0:iters + 1]
         r_merit_hist = r_merit_hist[0:iters + 1]
 
-        return (xs, us, lamxs, ts, is_success,
-                cost_hist, kkt_error_hist, dyn_error_hist,
+        return (xs, us, lamxs, ts, 
+                is_success, cost_hist, kkt_error_hist, dyn_error_hist,
                 gamma_hist, alpha_hist, r_merit_hist)
-
-    def print_result(self):
-        """ Print summary of result.
-        """
-        is_success = self._result['is_success']
-        if is_success:
-            status = 'success'
-        else:
-            status = 'failure'
-        noi = self._result['noi']
-        computation_time = self._result['computation_time']
-        cost = self._result['cost_hist'][-1]
-        kkt_error = self._result['kkt_error_hist'][-1]
-
-        print('------------------- RESULT -------------------')
-        print(f'solver: {self._solver_name}')
-        print(f'status: {status}')
-        print(f'number of iterations: {noi}')
-        print(f'computation time: {computation_time:.6f} [s]')
-        if noi >= 1:
-            print(f'per update : {computation_time / noi:.6f} [s]')
-        print(f'final cost value: {cost:.8f}')
-        print(f'final KKT error: {kkt_error:.8f}')
-        print('----------------------------------------------')
-
-
-    def log_data(self):
-        """ Log data to self._log_dir.
-        """
-        cost_hist = self._result['cost_hist']
-        kkt_error_hist = self._result['kkt_error_hist']
-
-        logger = Logger(self._log_dir)
-        logger.save(self._xs_opt, self._us_opt, self._ts,
-                    cost_hist, kkt_error_hist)
-
-    def plot_data(self, save=True):
-        """ Plot data.
-
-        Args:
-            save (bool): If True, graph is saved.
-        """
-        cost_hist = self._result['cost_hist']
-        kkt_error_hist = self._result['kkt_error_hist']
-
-        plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
-                          cost_hist, kkt_error_hist)
-        plotter.plot(save=save)
 
 
 @numba.njit
@@ -479,7 +483,7 @@ def backward_recursion(
 
         Ks[i] = -G_inv @ H
         ks[i] = -G_inv @ (Bs[i].T @ (Ps[i + 1] @ x_bars[i] + ps[i + 1]) + lu_bars[i])
- 
+
         Ps[i] = F - Ks[i].T @ G @ Ks[i]
         ps[i] = As[i].T @ (ps[i + 1] + Ps[i + 1] @ x_bars[i]) + lx_bars[i] + H.T @ ks[i]
         
@@ -518,7 +522,8 @@ def forward_recursion(
 def line_search(
         f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
         xs, us, lamxs, dxs, dus, dlamxs,
-        alpha_min, r_alpha, cost, kkt_error, r_merit):
+        alpha_min, r_alpha, enable_line_search,
+        cost, kkt_error, r_merit):
     """ Line search (multiple-shooting).
     
     Returns:
@@ -569,7 +574,7 @@ def line_search(
             break
 
         # reached minimum alpha
-        if alpha < alpha_min:
+        if (not enable_line_search) or (alpha < alpha_min):
             break
 
         # update alpha
