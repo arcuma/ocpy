@@ -61,6 +61,12 @@ class DDPSolver(SolverBase):
         """ Reset guess to zero.
         """
         self._us_guess = np.zeros((self._N, self._n_u))
+    
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        self._us_opt = np.zeros((self._N, self._n_u))
+        self._xs_opt = np.zeros((self._N, self._n_x))
 
     def set_stop_tol(self, stop_tol: float=None):
         """ Set stop tolerance.
@@ -108,20 +114,22 @@ class DDPSolver(SolverBase):
                           self._result['cost_hist'])
         plotter.plot(save=save)
 
-    def init_solver(self, max_iters=1, save_result=False):
+    def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
-        self.solve(max_iters=max_iters, save_result=save_result)
+        max_iters_eva = self._max_iters
+        self._max_iters = 1
+        self.solve(save_result=False)
+        self._max_iters = max_iters_eva
 
         print("Initialization done.")
 
     def solve(
             self,
-            update_gamma: bool=False, enable_line_search: bool=True,
-            max_iters: int=None, from_opt=False,
+            from_opt=False,
             result=False, log=False, plot=False, save_result=True
         ):
         """ Solve OCP via DDP iteration.
@@ -143,25 +151,6 @@ class DDPSolver(SolverBase):
             ts (np.ndarray): Discretized Time at each stage.
             is_success (bool): Success or not.
         """
-        if update_gamma:
-            gamma_init = self._gamma_init
-            r_gamma = self._r_gamma
-            gamma_min = self._gamma_min
-            gamma_max = self._gamma_max
-        else:
-            gamma_init =  gamma_min = gamma_max = self._gamma_init
-            r_gamma = 1.0
-
-        if enable_line_search:
-            alpha_min = self._alpha_min
-            r_alpha = self._r_alpha
-        else:
-            alpha_min = 1.0
-            r_alpha = self._r_alpha
-
-        if max_iters is None:
-            max_iters = self._max_iters
-
         if from_opt is True:
             us_guess = self._us_opt
         else:
@@ -177,13 +166,15 @@ class DDPSolver(SolverBase):
         time_start = time.perf_counter()
 
         # solve
-        xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
+        xs, us, ts, \
+        is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N,
             us_guess,
-            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-            self._stop_tol, max_iters, self._is_ddp
+            self._gamma_init, self._r_gamma, self._gamma_min, self._gamma_max, self._fix_gamma,
+            self._alpha_min, self._r_alpha, self._enable_line_search,
+            self._stop_tol, self._min_iters, self._max_iters, self._is_ddp
         )
 
         time_end = time.perf_counter()
@@ -222,8 +213,9 @@ class DDPSolver(SolverBase):
             f, fx, fu, fxx, fux, fuu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             t0, x0, T, N, us_guess,
-            gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-            stop_tol, max_iters, is_ddp
+            gamma_init, r_gamma, gamma_min, gamma_max, fix_gamma,
+            alpha_min, r_alpha, enable_line_search,
+            stop_tol, min_iters, max_iters, is_ddp
         ):
         """ DDP algorithm.
 
@@ -262,13 +254,17 @@ class DDPSolver(SolverBase):
                 gamma, is_ddp
             )
 
+            # stop criterion
             if np.abs(delta_V) < stop_tol:
                 is_success = True
+
+            if is_success and iters > min_iters:
                 iters -= 1
                 break
             
             # step size
             alpha = 1.0
+            success_line_search = False
 
             # line search
             while True:
@@ -279,26 +275,31 @@ class DDPSolver(SolverBase):
                     ks, Ks, alpha
                 )
 
-                # stop line search condition
+                # stop condition of line search
                 if cost_new < cost:
-                    gamma /= r_gamma
+                    success_line_search = True
                     break
 
-                if alpha < alpha_min:
-                    gamma *= r_gamma
+                if (not enable_line_search) or (alpha < alpha_min):
                     break
                 
                 # update alpha
                 alpha *= r_alpha
+
+            # modify regularization coefficient
+            if not fix_gamma:
+                if success_line_search:
+                    gamma *= r_gamma
+                else:
+                    gamma /= r_gamma
+                # clip gamma
+                gamma = min(max(gamma, gamma_min), gamma_max)
 
             # update trajectory
             xs = xs_new
             us = us_new
             cost = cost_new
     
-            # clip gamma
-            gamma = min(max(gamma, gamma_min), gamma_max)
-
             cost_hist[iters] = cost
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha

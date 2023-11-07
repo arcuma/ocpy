@@ -61,7 +61,7 @@ class MPC:
         """
         return self._log_dir
 
-    def init_mpc(self, enable_line_search=True):
+    def init_mpc(self, max_iters_init=10, save_result=True):
         """ Solve ocp once for getting solution guess.
 
         Args:
@@ -70,12 +70,14 @@ class MPC:
         Note:
             Do not change initial condition after this method is called.
         """
-        self._solver.solve(enable_line_search=enable_line_search)
-        self._enable_line_search = enable_line_search
+        max_iters_eva = self._solver._max_iters
+        self._solver._max_iters = max_iters_init
+        self._solver.solve(save_result=save_result)
+        self._solver._max_iters = max_iters_eva
         self._initialized = True
 
     def run(self, T_sim: float=20, sampling_time: float=0.005,
-            max_iters_mpc: int=5, feedback_delay=False,
+            feedback_delay=False,
             result=True, log=True, plot=True):
         """ Run MPC.
 
@@ -117,25 +119,24 @@ class MPC:
         u = solver._us_guess[0, :]
 
         # MPC
-        for t in ts_real:
+        for i, t in enumerate(ts_real):
 
             if feedback_delay:
-                x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
+                x_next = self.RK4(f, x, u, t, sampling_time)
                 # save
                 xs_real.append(x)
                 us_real.append(u)
 
             solver.set_initial_condition(t, x)
-            solver.solve(from_opt=True, update_gamma=False,
-                         enable_line_search=self._enable_line_search,
-                         max_iters=max_iters_mpc)
+
+            solver.solve(from_opt=True)
 
             # In MPC, we use initial value of optimal input trajectory.
             us_opt = solver.get_us_opt()
             u = us_opt[0]
 
             if not feedback_delay:
-                x_next = self.update_state(f, x, u, t, sampling_time, 1e-3)
+                x_next = self.RK4(f, x, u, t, sampling_time)
                 # save
                 xs_real.append(x)
                 us_real.append(u)
@@ -174,30 +175,17 @@ class MPC:
         return xs_real, us_real, ts_real
     
     @staticmethod
-    @numba.njit
-    def update_state(
-            f, x: np.ndarray, u: np.ndarray, t: float,
-            sampling_time: float, precision: float=None
-        ):
-        """ Simulation.
+    def forward_euler(f, x: np.ndarray, u: np.ndarray, t:float, dt:float):
+        return x + f(x, u, t) * dt
 
-        f (function): RHS of state equation. 
-        x (np.ndarray): State. 
-        u (np.ndarray): Control input. 
-        t (float): Time.
-        sampling_time (float): Sampling time.
-        precision (float=None):
-        """
-        if precision is None:
-            x_next = x + f(x, u, t) * sampling_time
-        else:
-            x_next = x.copy()
-            q = int(sampling_time // precision)
-            r = sampling_time % precision
-            for i in range(q):
-                x_next = x + f(x, u, t + i*precision) * precision
-                x = x_next
-            x_next = x + f(x, u, t + q*precision) * r
+    @staticmethod
+    def RK4(f, x: np.ndarray, u: np.ndarray, t:float, dt:float):
+        k1 = f(x, u, t)
+        k2 = f(x + 0.5*dt*k1, u, t + 0.5*dt)
+        k3 = f(x + 0.5*dt*k2, u, t + 0.5*dt)
+        k4 = f(x + dt*k3, u, t + dt)
+        x_next = x + (k1 + 2*k2 + 2*k3 + k4)*dt/6
+        
         return x_next
     
     def print_result(self):

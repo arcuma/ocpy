@@ -82,6 +82,13 @@ class UCRRSolver(SolverBase):
         self._us_guess = np.zeros((self._N, self._n_u))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
 
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
+        self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
+
     def set_kkt_tol(self, kkt_tol: float=None):
         """ Set stop criterion. 
 
@@ -139,23 +146,23 @@ class UCRRSolver(SolverBase):
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
 
-    def init_solver(self, max_iters=1, save_result=False):
+    def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
-        self.solve(
-            max_iters=max_iters, save_result=save_result
-        )
+        max_iters_eva = self._max_iters
+        self._max_iters = 1
+        self.solve(save_result=False)
+        self._max_iters = max_iters_eva
 
         print("Initialization done.")
 
     def solve(
             self,
-            update_gamma: bool=False, enable_line_search: bool=False,
-            max_iters: int=None, from_opt :bool=False,
-            result=False, log=False, plot=False, save_result=True
+            from_opt=False, save_result=True,
+            result=False, log=False, plot=False
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
@@ -176,25 +183,6 @@ class UCRRSolver(SolverBase):
             us (np.ndarray): Optimal control trajectory. N * n_u.
             is_success (bool): Success or not.
         """
-        if update_gamma:
-            gamma_init = self._gamma_init
-            r_gamma = self._r_gamma
-            gamma_min = self._gamma_min
-            gamma_max = self._gamma_max
-        else:
-            gamma_init =  gamma_min = gamma_max = self._gamma_init
-            r_gamma = 1.0
-
-        if enable_line_search:
-            alpha_min = self._alpha_min
-            r_alpha = self._r_alpha
-        else:
-            alpha_min = 1.0
-            r_alpha = self._r_alpha
-
-        if max_iters is None:
-            max_iters = self._max_iters
-
         if from_opt is True:
             xs_guess = self._xs_opt
             us_guess = self._us_opt
@@ -217,12 +205,13 @@ class UCRRSolver(SolverBase):
         xs, us, lamxs, ts, \
         is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
         gamma_hist, alpha_hist, r_merit_hist = self._solve(
-                f, fx, fu,
-                l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-                self._t0, self._x0, self._T, self._N, 
-                xs_guess, us_guess, lamxs_guess,
-                gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-                self._kkt_tol, max_iters
+            f, fx, fu,
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            self._t0, self._x0, self._T, self._N, 
+            xs_guess, us_guess, lamxs_guess,
+            self._gamma_init, self._r_gamma, self._gamma_min, self._gamma_max, self._fix_gamma,
+            self._alpha_min, self._r_alpha, self._enable_line_search,
+            self._kkt_tol, self._min_iters, self._max_iters
         )
 
         time_end = time.perf_counter()
@@ -263,12 +252,15 @@ class UCRRSolver(SolverBase):
 
     @staticmethod
     @numba.njit
-    def _solve(f, fx, fu, 
-               l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-               t0, x0, T, N,
-               xs, us, lamxs,
-               gamma_init, r_gamma, gamma_min, gamma_max,
-               alpha_min, r_alpha, kkt_tol, max_iters):
+    def _solve(
+            f, fx, fu, 
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            t0, x0, T, N,
+            xs, us, lamxs,
+            gamma_init, r_gamma, gamma_min, gamma_max, fix_gamma,
+            alpha_min, r_alpha, enable_line_search,
+            kkt_tol, min_iters, max_iters
+        ):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lamxs, ts, is_success,
@@ -316,8 +308,11 @@ class UCRRSolver(SolverBase):
 
         for iters in range(1, max_iters + 1):
 
-            if kkt_error < kkt_tol and iters > 1:
+            # stop condition
+            if kkt_error < kkt_tol:
                 is_success = True
+
+            if iters > min_iters and is_success:
                 iters -= 1
                 break
 
@@ -345,20 +340,21 @@ class UCRRSolver(SolverBase):
                 = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
                     xs, us, lamxs, dxs, dus, dlamxs,
-                    alpha_min, r_alpha, cost, kkt_error, r_merit
+                    alpha_min, r_alpha, enable_line_search,
+                    cost, kkt_error, r_merit
             )
 
             # evaluate dynamics feasibility
             dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
             # modify regularization coefficient
-            if kkt_error_new < kkt_error:
-                gamma /= r_gamma
-            else:
-                gamma *= r_gamma
-
-            # clip gamma
-            gamma = min(max(gamma, gamma_min), gamma_max)
+            if not fix_gamma:
+                if alpha > alpha_min:
+                    gamma /= r_gamma
+                else:
+                    gamma *= r_gamma
+                # clip gamma
+                gamma = min(max(gamma, gamma_min), gamma_max)
 
             # update variables.
             xs = xs_new
@@ -487,7 +483,7 @@ def backward_recursion(
 
         Ks[i] = -G_inv @ H
         ks[i] = -G_inv @ (Bs[i].T @ (Ps[i + 1] @ x_bars[i] + ps[i + 1]) + lu_bars[i])
- 
+
         Ps[i] = F - Ks[i].T @ G @ Ks[i]
         ps[i] = As[i].T @ (ps[i + 1] + Ps[i + 1] @ x_bars[i]) + lx_bars[i] + H.T @ ks[i]
         
@@ -526,7 +522,8 @@ def forward_recursion(
 def line_search(
         f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
         xs, us, lamxs, dxs, dus, dlamxs,
-        alpha_min, r_alpha, cost, kkt_error, r_merit):
+        alpha_min, r_alpha, enable_line_search,
+        cost, kkt_error, r_merit):
     """ Line search (multiple-shooting).
     
     Returns:
@@ -577,7 +574,7 @@ def line_search(
             break
 
         # reached minimum alpha
-        if alpha < alpha_min:
+        if (not enable_line_search) or (alpha < alpha_min):
             break
 
         # update alpha

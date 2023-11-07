@@ -36,7 +36,7 @@ class RiccatiRecursionSolver(SolverBase):
         self._mu_init = 1e-1
         self._r_mu = 0.01
         self._mu_min = 1e-8
-        self._update_mu = True
+        self._fix_mu = False
 
         self._kkt_tol = 1e-4
 
@@ -110,14 +110,23 @@ class RiccatiRecursionSolver(SolverBase):
             self._lamss_guess = lamss_guess
 
     def reset_guess(self):
-        """ Reset guess to zero.
+        """ Reset guess.
         """
         self._xs_guess = np.zeros((self._N + 1, self._n_x))
         self._us_guess = np.zeros((self._N, self._n_u))
         self._ss_guess = np.ones((self._N, self._n_g))
         self._lamxs_guess = np.zeros((self._N + 1, self._n_x))
         self._lamss_guess = np.ones((self._N, self._n_g))
-    
+
+    def reset_opt(self):
+        """ Reset solution.
+        """
+        self._xs_opt = np.zeros((self._N + 1, self._n_x))
+        self._us_opt = np.zeros((self._N, self._n_u))
+        self._ss_opt = np.ones((self._N, self._n_g))
+        self._lamxs_opt = np.zeros((self._N + 1, self._n_x))
+        self._lamss_opt = np.ones((self._N, self._n_g))
+
     def generate_ss(self, xs: np.ndarray, us: np.ndarray):
         """ Reset trajectory of slack variables of inequality constraints.
 
@@ -175,13 +184,14 @@ class RiccatiRecursionSolver(SolverBase):
     
     def set_barrier_param(
             self, mu_init: float=None, r_mu: float=None,
-            mu_min: float=None):
+            mu_min: float=None, fix_mu: bool=None):
         """ Set parameters related to barrier function.
 
         Args:
             mu_init (float): Initial value of barrier coefficient.
             r_mu (float): Update rate of barrier coefficient.
             mu_min (float): Stop tolerance of barrier coefficient.
+            fix_mu (bool): If fix barrier parameter or not.
         """
         if mu_init is not None:
             self._mu_init = mu_init
@@ -189,6 +199,8 @@ class RiccatiRecursionSolver(SolverBase):
             self._r_mu = r_mu
         if mu_min is not None:
             self._mu_min = mu_min
+        if fix_mu is not None:
+            self._fix_mu = fix_mu
 
     def print_result(self):
         """ Print summary of result.
@@ -237,24 +249,23 @@ class RiccatiRecursionSolver(SolverBase):
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
 
-    def init_solver(self, max_iters=1, save_result=False):
+    def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
         # compile
-        self.solve(
-            max_iters=max_iters, save_result=save_result
-        )
+        max_iters_eva = self._max_iters
+        self._max_iters = 1
+        self.solve(save_result=False)
+        self._max_iters = max_iters_eva
 
         print("Initialization done.")
 
     def solve(
-            self,
-            update_gamma: bool=False, enable_line_search: bool=False,
-            update_mu: bool=True,
-            max_iters: int=None, from_opt :bool=False,
-            result=False, log=False, plot=False, save_result=True
+            self, 
+            from_opt :bool=False, save_result=True,
+            result=False, log=False, plot=False
         ):
         """ Solve OCP via Riccati Recursion iteration.
 
@@ -277,25 +288,6 @@ class RiccatiRecursionSolver(SolverBase):
             us (np.ndarray): Optimal control trajectory. N * n_u.
             is_success (bool): Success or not.
         """
-        if update_gamma:
-            gamma_init = self._gamma_init
-            r_gamma = self._r_gamma
-            gamma_min = self._gamma_min
-            gamma_max = self._gamma_max
-        else:
-            gamma_init =  gamma_min = gamma_max = self._gamma_init
-            r_gamma = 1.0
-
-        if enable_line_search:
-            alpha_min = self._alpha_min
-            r_alpha = self._r_alpha
-        else:
-            alpha_min = 1.0
-            r_alpha = self._r_alpha
-
-        if max_iters is None:
-            max_iters = self._max_iters
-
         if from_opt is True:
             xs_guess = self._xs_opt
             us_guess = self._us_opt
@@ -323,15 +315,15 @@ class RiccatiRecursionSolver(SolverBase):
         xs, us, ss, lamxs, lamss, ts, \
         is_success, cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
         gamma_hist, alpha_hist, mu_hist, r_merit_hist = self._solve(
-                f, fx, fu,
-                l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-                g, gx, gu,
-                self._t0, self._x0, self._T, self._N, 
-                xs_guess, us_guess, ss_guess, lamxs_guess, lamss_guess,
-                gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha,
-                self._mu_init, self._r_mu, self._mu_min,
-                update_mu,
-                self._kkt_tol, max_iters
+            f, fx, fu,
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            g, gx, gu,
+            self._t0, self._x0, self._T, self._N, 
+            xs_guess, us_guess, ss_guess, lamxs_guess, lamss_guess,
+            self._gamma_init, self._r_gamma, self._gamma_min, self._gamma_max, self._fix_gamma,
+            self._alpha_min, self._r_alpha, self._enable_line_search,
+            self._mu_init, self._r_mu, self._mu_min, self._fix_mu,
+            self._kkt_tol, self._min_iters, self._max_iters
         )
 
         time_end = time.perf_counter()
@@ -378,14 +370,16 @@ class RiccatiRecursionSolver(SolverBase):
 
     @staticmethod
     @numba.njit
-    def _solve(f, fx, fu, 
-               l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
-               g, gx, gu,
-               t0, x0, T, N,
-               xs, us, ss, lamxs, lamss,
-               gamma_init, r_gamma, gamma_min, gamma_max, alpha_min, r_alpha, 
-               mu_init, r_mu, mu_min, update_mu,
-               kkt_tol, max_iters):
+    def _solve(
+            f, fx, fu, 
+            l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
+            g, gx, gu,
+            t0, x0, T, N,
+            xs, us, ss, lamxs, lamss,
+            gamma_init, r_gamma, gamma_min, gamma_max, fix_gamma,
+            alpha_min, r_alpha, enable_line_search,
+            mu_init, r_mu, mu_min, fix_mu,
+            kkt_tol, min_iters, max_iters):
         """ Riccati Recursion algorighm.
 
         Returns: (xs, us, lamxs, ts, is_success,
@@ -450,17 +444,17 @@ class RiccatiRecursionSolver(SolverBase):
         for iters in range(1, max_iters + 1):
 
             # stop condition
-            # if update_mu == False, kkt_error_mu is used for creterion.
-            if update_mu:
-                if kkt_error < kkt_tol:
-                    is_success = True
-                    iters -= 1
-                    break
-            else:
+            # if fix_mu == True, kkt_error_mu is used for creterion.
+            if fix_mu:
                 if kkt_error_mu < kkt_tol:
                     is_success = True
-                    iters -= 1
-                    break
+            else:
+                if kkt_error < kkt_tol:
+                    is_success = True
+            
+            if iters > min_iters and is_success:
+                iters -= 1
+                break
 
             # compute blocks of pertubed KKT system
             kkt_blocks = compute_linearlized_kkt_blocks(
@@ -498,24 +492,25 @@ class RiccatiRecursionSolver(SolverBase):
             xs, us, ss, lamxs, lamss, cost, kkt_error, kkt_error_mu, \
             alpha, alpha_dual, r_merit_new = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt,
-                    xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss,
-                    mu, alpha_min, r_alpha, cost, kkt_error_mu, r_merit
+                    xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss, mu, 
+                    alpha_min, r_alpha, enable_line_search,
+                    cost, kkt_error_mu, r_merit
             )
 
             # evaluate dynamics feasibility
             dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
             # modify regularization coefficient
-            if alpha_min < alpha:
-                gamma /= r_gamma
-            else:
-                gamma *= r_gamma
-            
-            # clip gamma
-            gamma = min(max(gamma, gamma_min), gamma_max)
+            if not fix_gamma:
+                if alpha < alpha_min:
+                    gamma /= r_gamma
+                else:
+                    gamma *= r_gamma
+                # clip gamma
+                gamma = min(max(gamma, gamma_min), gamma_max)
 
             # update barrier parameter
-            if update_mu:
+            if not fix_mu:
                 th = 10.0
                 kkt_tol_mu = max(mu * th, kkt_tol - mu)
                 # kkt_tol_mu = mu
@@ -531,8 +526,6 @@ class RiccatiRecursionSolver(SolverBase):
             alpha_hist[iters] = alpha
             mu_hist[iters] = mu
             r_merit_hist[iters] = r_merit
-        else:
-            is_success = False
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
@@ -798,8 +791,9 @@ def forward_recursion(
 @numba.njit
 def line_search(
         f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt, 
-        xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss,
-        mu, alpha_min, r_alpha, cost, kkt_error_mu, r_merit
+        xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss, mu, 
+        alpha_min, r_alpha, enable_line_search, 
+        cost, kkt_error_mu, r_merit
     ):
     """ Line search (multiple-shooting).
     
@@ -888,12 +882,12 @@ def line_search(
             break
 
         # reached minimum alpha
-        if alpha_primal < alpha_min:
+        if (not enable_line_search) or (alpha_primal < alpha_min):
             break
 
         # update alpha
         alpha_primal *= r_alpha
-    
+
     # eval new kkt error
     kkt_error_new = eval_kkt_error(
         f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
@@ -941,7 +935,7 @@ def eval_merit_and_derivative(
 
         # cost
         merit_cost += l(x, u, t) * dt
-        merit_cost += -mu * np.log(ss[i]).sum()
+        merit_cost += -mu * np.log(s).sum()
 
         # constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
