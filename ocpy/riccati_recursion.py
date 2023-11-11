@@ -3,6 +3,7 @@ import numpy as np
 import numba
 import abc
 import time
+import matplotlib.pyplot as plt
 
 from ocpy import symutils
 from ocpy.ocp import OCP
@@ -57,9 +58,14 @@ class RiccatiRecursionSolver(SolverBase):
         self._result['kkt_error_mu_hist'] = None
         self._result['dyn_error_hist'] = None
         self._result['gamma_hist'] = None
-        self._result['alpha_hist'] = None
+        self._result['alpha_primal_hist'] = None
+        self._result['alpha_dual_hist'] = None
+        self._result['alpha_s_max_hist'] = None
+        self._result['alpha_lams_max_hist'] = None
         self._result['mu_hist'] = None
         self._result['r_merit_hist'] = None
+        self._result['merit_hist'] = None
+        self._result['deriv_merit_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
         self._result['ss_opt'] = np.ndarray(0)
@@ -248,13 +254,86 @@ class RiccatiRecursionSolver(SolverBase):
         plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
+    
+    def plot_detail(self):
+        """ plot result of some parameters.
+        """
+        result = self.get_result()
+
+        cost_hist = result['cost_hist']
+        plt.plot(cost_hist)
+        plt.title('cost')
+        plt.show()
+
+        kkt_error_hist = result['kkt_error_hist']
+        kkt_error_mu_hist = result['kkt_error_mu_hist']
+        plt.yscale('log')
+        plt.plot(kkt_error_hist, label='kkt_error')
+        plt.plot(kkt_error_mu_hist, label='kkt_error_mu')
+        plt.legend()
+        plt.title('KKT error')
+        plt.show()
+
+        # dyn_error_hist = result['dyn_error_hist']
+        # dyn_error_hist = np.where(dyn_error_hist < 1e-20, np.nan, dyn_error_hist)
+        # plt.yscale('log')
+        # plt.plot(kkt_error_hist, label='kkt_error')
+        # plt.plot(dyn_error_hist, label='dyn_error')
+        # plt.legend()
+        # plt.title('dynamics feasibility error')
+        # plt.show()
+
+        gamma_hist = result['gamma_hist']
+        plt.plot(gamma_hist)
+        plt.title('gamma')
+        plt.show()
+
+        alpha_primal_hist = result['alpha_primal_hist']
+        alpha_dual_hist = result['alpha_dual_hist']
+        plt.plot(alpha_primal_hist, label='alpha_primal')
+        plt.plot(alpha_dual_hist, label='alpha_dual')
+        plt.legend()
+        plt.title('alpha')
+        plt.yscale('log')
+        plt.show()
+
+        alpha_s_max_hist = result['alpha_s_max_hist']
+        alpha_lams_max_hist = result['alpha_lams_max_hist']
+        plt.plot(alpha_s_max_hist, label='alpha_s_max')
+        plt.plot(alpha_lams_max_hist, label='alpha_lams_max')
+        plt.legend()
+        plt.title('maximum alpha')
+        plt.yscale('log')
+        plt.show()
+
+        mu_hist = result['mu_hist']
+        plt.yscale('log')
+        plt.plot(mu_hist)
+        plt.title('barrier parameter')
+        plt.show()
+
+        r_merit_hist = result['r_merit_hist']
+        plt.plot(r_merit_hist)
+        plt.title('penalty coefficient of merit function')
+        plt.show()
+
+        merit_hist = result['merit_hist']
+        plt.plot(merit_hist)
+        plt.title('merit function')
+        plt.show()
+
+        deriv_merit_hist = result['deriv_merit_hist']
+        plt.plot(-deriv_merit_hist)
+        plt.yscale('log')
+        plt.title('directional derivative of merit function')
+        plt.show()
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
-        # compile
+        ### compile
         max_iters_eva = self._max_iters
         self._max_iters = 1
         self.solve(save_result=False)
@@ -270,23 +349,12 @@ class RiccatiRecursionSolver(SolverBase):
         """ Solve OCP via Riccati Recursion iteration.
 
         Args:
-            update_gamma (bool): If True, regularization coefficient is updated.
-            enable_line_search (bool=True): If true, enable line searching.
-            update_mu (bool=True): If True, barrier parameter is updated \
-                while iteration.
-            max_iters (int): Number of max iterations.
             from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
             save_result (bool): If true, results are saved.
-        
-        Returns:
-            ts (np.ndarray): Discretized Time at each stage.
-            xs (np.ndarray): Optimal state trajectory. (N + 1) * n_x.
-            us (np.ndarray): Optimal control trajectory. N * n_u.
-            is_success (bool): Success or not.
         """
         if from_opt is True:
             xs_guess = self._xs_opt
@@ -301,20 +369,23 @@ class RiccatiRecursionSolver(SolverBase):
             lamxs_guess = self._lamxs_guess
             lamss_guess = self._lamss_guess
 
-        # derivatives of functions
+        ### derivatives of functions
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
         g, gx, gu, gxx, gux, guu = self._dg
 
-        # success flag of solver
+        ### success flag of solver
         is_success = False
 
         time_start = time.perf_counter()
 
-        # solve
+        ### solve
         xs, us, ss, lamxs, lamss, ts, \
-        is_success, cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
-        gamma_hist, alpha_hist, mu_hist, r_merit_hist = self._solve(
+        is_success, \
+        cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
+        gamma_hist, \
+        alpha_primal_hist, alpha_dual_hist,alpha_s_max_hist, alpha_lams_max_hist,\
+        mu_hist, r_merit_hist, merit_hist, deriv_merit_hist = self._solve(
             f, fx, fu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             g, gx, gu,
@@ -329,7 +400,7 @@ class RiccatiRecursionSolver(SolverBase):
         time_end = time.perf_counter()
         computation_time = time_end - time_start
 
-        # number of iterations
+        ### number of iterations
         noi = len(cost_hist) - 1
 
         if save_result:
@@ -348,9 +419,14 @@ class RiccatiRecursionSolver(SolverBase):
             self._result['kkt_error_mu_hist'] = kkt_error_mu_hist
             self._result['dyn_error_hist'] = dyn_error_hist
             self._result['gamma_hist'] = gamma_hist
-            self._result['alpha_hist'] = alpha_hist
+            self._result['alpha_primal_hist'] = alpha_primal_hist
+            self._result['alpha_dual_hist'] = alpha_dual_hist
+            self._result['alpha_s_max_hist'] = alpha_s_max_hist
+            self._result['alpha_lams_max_hist'] = alpha_lams_max_hist
             self._result['mu_hist'] = mu_hist
             self._result['r_merit_hist'] = r_merit_hist
+            self._result['merit_hist'] = merit_hist
+            self._result['deriv_merit_hist'] = deriv_merit_hist
             self._result['xs_opt'] = xs
             self._result['us_opt'] = us
             self._result['ss_opt'] = ss
@@ -358,13 +434,13 @@ class RiccatiRecursionSolver(SolverBase):
             self._result['lamss_opt'] = lamss
             self._result['ts'] = ts
 
-        # results
+        ### results
         if result:
             self.print_result()
-        # log
+        ### log
         if log:
             self.log_data()
-        # plot            
+        ### plot            
         if plot:
             self.plot_data(save=log)
 
@@ -382,10 +458,13 @@ class RiccatiRecursionSolver(SolverBase):
             kkt_tol, min_iters, max_iters):
         """ Riccati Recursion algorighm.
 
-        Returns: (xs, us, lamxs, ts, is_success,
-                  cost_hist, kkt_error_hist, dyn_error_hist,
-                  gamma_hist, alpha_hist, mu_hist)
-
+        Returns:
+            (xs, us, ss, lamxs, lamss, ts, 
+            is_success,
+            cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,
+            gamma_hist, 
+            alpha_primal_hist, alpha_dual_hist, alpha_s_max_hist, alpha_lams_max_hist,
+            mu_hist, r_merit_hist, merit_hist, deriv_merit_hist)
         """
         dt = T / N
         ts = np.array([t0 + i * dt for i in range(N + 1)])
@@ -393,8 +472,10 @@ class RiccatiRecursionSolver(SolverBase):
         gamma = gamma_init
         mu = mu_init
         r_merit = 1.0
+        merit = np.inf
+        deriv_merit = np.inf
 
-        # check initial KKT error and cost
+        ### check initial KKT error and cost
         kkt_error = eval_kkt_error(
             f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
             xs, us, ss, lamxs, lamss, 0
@@ -406,44 +487,64 @@ class RiccatiRecursionSolver(SolverBase):
         cost = eval_cost(l, lf, t0, dt, xs, us)
         dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
-        # cost history
+        ### cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
         cost_hist[0] = cost
 
-        # KKT error history
+        ### KKT error history
         kkt_error_hist = np.zeros(max_iters + 1, dtype=float)
         kkt_error_hist[0] = kkt_error
 
-        # barrier KKT error history
+        ### barrier KKT error history
         kkt_error_mu_hist = np.zeros(max_iters + 1, dtype=float)
         kkt_error_mu_hist[0] = kkt_error_mu
 
-        # dynamics feasibility history
+        ### dynamics feasibility history
         dyn_error_hist = np.zeros(max_iters + 1, dtype=float)
         dyn_error_hist[0] = dyn_error
 
-        # gamma history
+        ### gamma history
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
         gamma_hist[0] = gamma
 
-        # alpha history
-        alpha_hist = np.zeros(max_iters + 1, dtype=float)
-        alpha_hist[0] = 0.0
+        ### alpha_primal history
+        alpha_primal_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_primal_hist[0] = 0.0
 
-        # mu (barrier parameter) history
+        ### alpha_dual history
+        alpha_dual_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_dual_hist[0] = 0.0
+
+        ### alpha_s_max history
+        alpha_s_max_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_s_max_hist[0] = 0.0
+
+        ### alpha_s_max history
+        alpha_lams_max_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_lams_max_hist[0] = 0.0
+
+        ### mu (barrier parameter) history
         mu_hist = np.zeros(max_iters + 1, dtype=float)
         mu_hist[0] = mu
 
-        # penalty coefficient of constraints violation in merit function
+        ### penalty coefficient of constraints violation in merit function
         r_merit_hist = np.zeros(max_iters + 1, dtype=float)
         r_merit_hist[0] = r_merit
 
-        # success flag
+        ### merit history
+        merit_hist = np.zeros(max_iters + 1, dtype=float)
+        merit_hist[0] = merit
+
+        ### directional derivative of merit history
+        deriv_merit_hist = np.zeros(max_iters + 1, dtype=float)
+        deriv_merit_hist[0] = deriv_merit
+
+        ### success flag
         is_success = False
 
         for iters in range(1, max_iters + 1):
 
-            # stop condition
+            ### stop condition
             # if fix_mu == True, kkt_error_mu is used for creterion.
             if fix_mu:
                 if kkt_error_mu < kkt_tol:
@@ -451,12 +552,12 @@ class RiccatiRecursionSolver(SolverBase):
             else:
                 if kkt_error < kkt_tol:
                     is_success = True
-            
+                        
             if iters > min_iters and is_success:
                 iters -= 1
                 break
 
-            # compute blocks of pertubed KKT system
+            ### compute blocks of pertubed KKT system
             kkt_blocks = compute_linearlized_kkt_blocks(
                 f, fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx, g, gx, gu,
                 t0, dt, xs, us, ss, lamxs, lamss
@@ -465,81 +566,95 @@ class RiccatiRecursionSolver(SolverBase):
             Qxxs, Quxs, Quus = kkt_blocks[4:7]
             x_bars, g_bars, lx_bars, lu_bars = kkt_blocks[7:11]
 
-            # turn into unconstrained
+            ### turn into unconstrained
             Qxx_ecs, Qux_ecs, Quu_ecs, lx_ecs, lu_ecs = eliminate_constraints(
                 Qxxs, Quxs, Quus, Cs, Ds, g_bars, lx_bars, lu_bars,
                 ss, lamss, mu
             )
 
-            # backward recursion 
+            ### backward recursion 
             Ps, ps, Ks, ks = backward_recursion(
                 As, Bs, Qxx_ecs, Qux_ecs, Quu_ecs, x_bars, lx_ecs, lu_ecs, gamma
             )
 
-            # forward recursion
+            ### forward recursion
             dxs, dus, dlamxs = forward_recursion(
                 Ps, ps, Ks, ks, As, Bs, x_bars, x0, xs[0]
             )
 
-            # get newton step of slack variables and lagrange variables
+            ### get newton step of slack variables and lagrange variables
             dss, dlamss = compute_slack_step(
                 Cs, Ds, g_bars, mu,
                 ss, lamss,
                 dxs, dus
             )
 
-            # line search
+            ### line search
             xs, us, ss, lamxs, lamss, cost, kkt_error, kkt_error_mu, \
-            alpha, alpha_dual, r_merit_new = line_search(
+            alpha_primal, alpha_dual, alpha_s_max, alpha_lams_max, \
+            r_merit, merit, deriv_merit = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt,
                     xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss, mu, 
                     alpha_min, r_alpha, enable_line_search,
                     cost, kkt_error_mu, r_merit
             )
 
-            # evaluate dynamics feasibility
+            ### evaluate dynamics feasibility
             dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
-            # modify regularization coefficient
+            ### modify regularization coefficient
             if not fix_gamma:
-                if alpha < alpha_min:
+                if alpha_primal < alpha_min:
                     gamma /= r_gamma
                 else:
                     gamma *= r_gamma
                 # clip gamma
                 gamma = min(max(gamma, gamma_min), gamma_max)
 
-            # update barrier parameter
+            ### update barrier parameter
             if not fix_mu:
-                th = 10.0
+                th = 10
                 kkt_tol_mu = max(mu * th, kkt_tol - mu)
-                # kkt_tol_mu = mu
                 if kkt_error_mu < kkt_tol_mu and mu >= kkt_tol / 100:
+                # if abs(deriv_merit) < kkt_tol_mu and mu >= kkt_tol / 100:
                     mu *= r_mu
 
-            # parameters' history
+            ### parameters' history
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
             kkt_error_mu_hist[iters] = kkt_error_mu
             dyn_error_hist[iters] = dyn_error
             gamma_hist[iters] = gamma
-            alpha_hist[iters] = alpha
+            alpha_primal_hist[iters] = alpha_primal
+            alpha_dual_hist[iters] = alpha_dual
+            alpha_s_max_hist[iters] = alpha_s_max
+            alpha_lams_max_hist[iters] = alpha_lams_max
             mu_hist[iters] = mu
             r_merit_hist[iters] = r_merit
+            merit_hist[iters] = merit
+            deriv_merit_hist[iters] = deriv_merit
+
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
         kkt_error_mu_hist = kkt_error_mu_hist[0:iters + 1]
         dyn_error_hist = dyn_error_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
-        alpha_hist = alpha_hist[0:iters + 1]
+        alpha_primal_hist = alpha_primal_hist[0:iters + 1]
+        alpha_dual_hist = alpha_dual_hist[0:iters + 1]
+        alpha_s_max_hist = alpha_s_max_hist[0:iters + 1]
+        alpha_lams_max_hist = alpha_lams_max_hist[0:iters + 1]
         mu_hist = mu_hist[0: iters + 1]
         r_merit_hist = r_merit_hist[0: iters + 1]
+        merit_hist = merit_hist[0: iters + 1]
+        deriv_merit_hist = deriv_merit_hist[0: iters + 1]
 
         return (xs, us, ss, lamxs, lamss, ts, 
                 is_success,
                 cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,
-                gamma_hist, alpha_hist, mu_hist, r_merit_hist)
+                gamma_hist, 
+                alpha_primal_hist, alpha_dual_hist, alpha_s_max_hist, alpha_lams_max_hist,
+                mu_hist, r_merit_hist, merit_hist, deriv_merit_hist)
 
 
 @numba.njit
@@ -558,15 +673,15 @@ def compute_new_mu(
     N = ss.shape[0]
     n_g = ss.shape[1]
 
-    # reduction factor
+    ### reduction factor
     sigma = 0.8
 
-    # ss \bigodot lamss
+    ### ss \bigodot lamss
     ss_lamss = 0.0
     for i in range(N):
         ss_lamss += ss[i].T @ lamss[i]
     
-    # duality measure
+    ### duality measure
     mu_new = ss_lamss / (N * n_g)
 
     mu_new *= sigma
@@ -595,7 +710,7 @@ def compute_linearlized_kkt_blocks(
     n_u = us.shape[1]
     n_g = ss.shape[1]
 
-    # LHS
+    ### LHS
     As = np.empty((N, n_x, n_x))
     Bs = np.empty((N, n_x, n_u))
     Cs = np.empty((N, n_g, n_x))
@@ -604,7 +719,7 @@ def compute_linearlized_kkt_blocks(
     Quxs = np.empty((N, n_u, n_x))
     Quus = np.empty((N, n_u, n_u))
     
-    # RHS
+    ### RHS
     x_bars = np.empty((N, n_x))
     g_bars = np.empty((N, n_g))
     lx_bars = np.empty((N + 1, n_x))
@@ -613,7 +728,7 @@ def compute_linearlized_kkt_blocks(
     I = np.eye(n_x)
 
     for i in range(N):
-        # variables at stage i
+        ### variables at stage i
         t = t0 + i * dt
         x = xs[i]
         u = us[i]
@@ -621,11 +736,11 @@ def compute_linearlized_kkt_blocks(
         x_1 = xs[i + 1]
         lamx_1 = lamxs[i + 1]
 
-        # hamiltonian
+        ### hamiltonian
         Hx = lx(x, u, t) + lamx_1.T @ fx(x, u, t)
         Hu = lu(x, u, t) + lamx_1.T @ fu(x, u, t)
 
-        # blocks
+        ### blocks
         As[i] = I + fx(x, u, t) * dt
         Bs[i] = fu(x, u, t) * dt
         Cs[i] = gx(x, u, t)
@@ -737,11 +852,11 @@ def backward_recursion(
     Ks = np.empty((N, n_u, n_x))
     ks = np.empty((N, n_u))
 
-    # i = N
+    ### i = N
     Ps[N] = Qxxs[N]
     ps[N] = lx_bars[N]
 
-    # regularlization
+    ### regularlization
     Reg = gamma * np.eye(n_u)
 
     for i in range(N - 1, -1, -1):
@@ -807,30 +922,30 @@ def line_search(
 
     c_armijo = 1e-4
 
-    # updated variables
+    ### updated variables
     xs_new = np.empty(xs.shape)
     us_new = np.empty(us.shape)
     ss_new = np.empty(ss.shape)
     lamxs_new = np.empty(lamxs.shape)
     lamss_new = np.empty(lamss.shape)
 
-    # maximum alpha
+    ### maximum alpha
     alpha_s_max = 1.0
     alpha_lams_max = 1.0
 
-    # margin of the fraction to the boundary rule
+    ### margin of the fraction to the boundary rule
     tau = 0.995
 
-    # merit value at nominal state
+    ### merit value at nominal state
     merit, deriv_merit, r_merit = eval_merit_and_derivative(
         f, l, lx, lu, lf, lfx, g, t0, x0, dt, 
         xs, us, ss, dxs, dus, dss, mu, r_merit
     )
 
-    # fraction to the boundary rule
+    ### fraction to the boundary rule
     for i in range(N):
 
-        # s and lams at stage i
+        ### s and lams at stage i
         s = ss[i]
         lams = lamss[i]
         ds = dss[i]
@@ -848,32 +963,32 @@ def line_search(
     alpha_primal = alpha_s_max
     alpha_dual = alpha_lams_max
 
-    # backtracking line search
+    ### backtracking line search
     while True:
-        # new variables
+        ### new variables
         xs_new = xs + alpha_primal * dxs
         us_new = us + alpha_primal * dus
         ss_new = ss + alpha_primal * dss
         lamxs_new = lamxs + alpha_dual * dlamxs
         lamss_new = lamss + alpha_dual * dlamss
 
-        # evaluate merit function
+        ### evaluate merit function
         merit_new = eval_merit(
             f, l, lf, g, t0, x0, dt, xs_new, us_new, ss_new, mu, r_merit
         )
         
-        # evaluate new cost
+        ### evaluate new cost
         cost_new = eval_cost(
             l, lf, t0, dt, xs_new, us_new
         )
 
-        # evaluate new barrier KKT error
+        ### evaluate new barrier KKT error
         kkt_error_mu_new = eval_kkt_error(
             f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
             xs_new, us_new, ss_new, lamxs_new, lamss_new, mu
         )
 
-        # stop condition
+        ### stop condition
         if merit_new < merit + c_armijo * alpha_primal * deriv_merit:
             break
         if cost_new < cost:
@@ -881,14 +996,14 @@ def line_search(
         if (not np.isnan(cost_new)) and kkt_error_mu_new < kkt_error_mu:
             break
 
-        # reached minimum alpha
+        ### reached minimum alpha
         if (not enable_line_search) or (alpha_primal < alpha_min):
             break
 
-        # update alpha
+        ### update alpha
         alpha_primal *= r_alpha
 
-    # eval new kkt error
+    ### eval new kkt error
     kkt_error_new = eval_kkt_error(
         f, fx, fu, lx, lu, lfx, g, gx, gu, t0, x0, dt,
         xs_new, us_new, ss_new, lamxs_new, lamss_new, 0
@@ -896,7 +1011,8 @@ def line_search(
 
     return (xs_new, us_new, ss_new, lamxs_new, lamss_new,
             cost_new, kkt_error_new, kkt_error_mu_new,
-            alpha_primal, alpha_dual, r_merit)
+            alpha_primal, alpha_dual, alpha_s_max, alpha_lams_max,
+            r_merit, merit_new, deriv_merit)
 
 @numba.njit
 def eval_merit_and_derivative(
@@ -923,7 +1039,7 @@ def eval_merit_and_derivative(
     deriv_merit_constr += -np.linalg.norm(x0 - xs[0], 1)
 
     for i in range(N):
-        # variables
+        ### variables
         x = xs[i]
         x1 = xs[i + 1]
         u = us[i]
@@ -933,27 +1049,27 @@ def eval_merit_and_derivative(
         ds = dss[i]
         t = t0 + i * dt
 
-        # cost
+        ### cost
         merit_cost += l(x, u, t) * dt
         merit_cost += -mu * np.log(s).sum()
 
-        # constraint
+        ### constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
         merit_constr += np.linalg.norm(g(x, u, t) + s, 1)
 
-        # cost deriv
+        ### cost deriv
         deriv_merit_cost += lx(x, u, t) * dt @ dx
         deriv_merit_cost += lu(x, u, t) * dt @ du
         deriv_merit_cost += -mu * (1.0/s) @ ds
 
-        # constraint deriv
+        ### constraint deriv
         deriv_merit_constr += -np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
         deriv_merit_constr += -np.linalg.norm(g(x, u, t) + s, 1)
     
     merit_cost += lf(xs[N], t0 + N * dt)
     deriv_merit_cost += lfx(xs[N], t0 + N * dt) @ dxs[N]
 
-    # based on (3.5) of "An interior algorith for ..."
+    ### based on (3.5) of "An interior algorith for ..."
     if merit_constr > 1e-10:
         rho = 0.1
         r_merit_trial = deriv_merit_cost / ((1.0 - rho) * merit_constr)
@@ -961,6 +1077,9 @@ def eval_merit_and_derivative(
 
     merit = merit_cost + r_merit * merit_constr
     deriv_merit = deriv_merit_cost + r_merit * deriv_merit_constr
+
+    # print("deriv_merit, merit")
+    # print(deriv_merit, merit)
 
     return merit, deriv_merit, r_merit
 
@@ -988,17 +1107,17 @@ def eval_merit(
         s = ss[i]
         t = t0 + i * dt
 
-        # cost
+        ### cost
         merit_cost += l(x, u, t) * dt
         merit_cost += -mu * np.log(s).sum()
 
-        # constraint
+        ### constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, ord=1)
         merit_constr += np.linalg.norm(g(x, u, t) + s, ord=1)
     
     merit_cost += lf(xs[N], t0 + N * dt)
 
-    # merit function value
+    ### merit function value
     merit = merit_cost + r_merit * merit_constr
 
     return merit
@@ -1047,14 +1166,17 @@ def eval_kkt_error(
     Lu_error = 0.0
     cmpl_error = 0.0
 
-    # initial state
+    grad_lx_infty = 0.0
+    error_infty = 0.0
+
+    ### initial state
     res = x0 - xs[0]
     dyn_error += np.sum(np.abs(res) ** ord)
 
     mu1 = mu * np.ones(n_g)
 
     for i in range(N):
-        # variables at state i
+        ### variables at state i
         x = xs[i]
         u = us[i]
         s = ss[i]
@@ -1063,35 +1185,47 @@ def eval_kkt_error(
         x1 = xs[i + 1]
         lamx1 = lamxs[i + 1]
         t = t0 + i * dt
-        # gradient of hamiltonian
+        ### gradient of hamiltonian
         Hx = lx(x, u, t) + lamx1.T @ fx(x, u, t)
         Hu = lu(x, u, t) + lamx1.T @ fu(x, u, t)
 
-        # dynamics
+        ### dynamics
         res = x + f(x, u, t) * dt - x1
         dyn_error += np.sum(np.abs(res) ** ord)
 
-        # inequality constraints with slack variables.
+        ### inequality constraints with slack variables.
         res = g(x, u, t) + s
         ineq_error += np.sum(np.abs(res) ** ord)
 
-        # Lx
+        ### Lx
         res = -lamx + lamx1 + Hx * dt + gx(x, u, t).T @ lams
         Lx_error += np.sum(np.abs(res) ** ord)
 
-        # Lu
+        ### Lu
         res = Hu * dt + gu(x, u, t).T @ lams
         Lu_error += np.sum(np.abs(res) ** ord)
 
-        # complementary condition
+        ### complementary condition
         res = lams * s - mu1
         cmpl_error += np.sum(np.abs(res) ** ord)
 
-    # Lx[N]
+        grad_lx_infty = max(grad_lx_infty, max(np.abs(lx(x, u, t) * dt) ** ord))
+        error_infty = max(error_infty, max(np.abs(-lamx + lamx1 + Hx * dt + gx(x, u, t).T @ lams) ** ord))
+
+    ### Lx[N]
     res = lfx(xs[N], t0 + N * dt) - lamxs[N]
     Lx_error += np.sum(np.abs(res) ** ord)
 
     kkt_error = dyn_error + ineq_error + Lx_error + Lu_error + cmpl_error
+
+    # grad_lx_infty = max(grad_lx_infty, max(np.abs(lfx(xs[N], t0 + N*dt)) ** ord))
+    # error_infty = max(error_infty, max(np.abs(lfx(xs[N], t0 + N * dt) - lamxs[N]) ** ord))
+
+    # print("kkt_error, Lx_error, Lu_error, cmpl_error, dyn_error, ineq_error")
+    # print(kkt_error, Lx_error, Lu_error, cmpl_error, dyn_error, ineq_error)
+    # print("grad_lx_infty, Lx_error, error_infty")
+    # print(grad_lx_infty, Lx_error, error_infty)
+    # print()
 
     return kkt_error ** (1.0 / ord)
 

@@ -3,6 +3,7 @@ import numpy as np
 import numba
 import abc
 import time
+import matplotlib.pyplot as plt
 
 from ocpy import symutils
 from ocpy.ocp import OCP
@@ -43,6 +44,8 @@ class UCRRSolver(SolverBase):
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
         self._result['r_merit_hist'] = None
+        self._result['merit_hist'] = None
+        self._result['deriv_merit_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
         self._result['lamxs_opt'] = np.ndarray(0)
@@ -146,12 +149,63 @@ class UCRRSolver(SolverBase):
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
 
+    def plot_detail(self):
+        """ plot result of some parameters.
+        """
+        result = self.get_result()
+
+        gamma_hist = result['gamma_hist']
+        plt.plot(gamma_hist)
+        plt.title('gamma')
+        plt.show()
+
+        alpha_hist = result['alpha_hist']
+        plt.plot(alpha_hist)
+        plt.title('alpha')
+        plt.show()
+
+        cost_hist = result['cost_hist']
+        plt.plot(cost_hist)
+        plt.title('cost')
+        plt.show()
+
+        kkt_error_hist = result['kkt_error_hist']
+        plt.yscale('log')
+        plt.plot(kkt_error_hist)
+        plt.title('KKT error')
+        plt.show()
+
+        dyn_error_hist = result['dyn_error_hist']
+        dyn_error_hist = np.where(dyn_error_hist < 1e-20, np.nan, dyn_error_hist)
+        plt.yscale('log')
+        plt.plot(kkt_error_hist, label='kkt_error')
+        plt.plot(dyn_error_hist, label='dyn_error')
+        plt.legend()
+        plt.title('dynamics feasibility error')
+        plt.show()
+
+        r_merit_hist = result['r_merit_hist']
+        plt.plot(r_merit_hist)
+        plt.title('penalty coefficient of merit function')
+        plt.show()
+
+        merit_hist = result['merit_hist']
+        plt.plot(merit_hist)
+        plt.title('merit function')
+        plt.show()
+
+        deriv_merit_hist = result['deriv_merit_hist']
+        plt.plot(-deriv_merit_hist)
+        plt.yscale('log')
+        plt.title('directional derivative of merit function')
+        plt.show()
+
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
         print("Initializing solver...")
 
-        # compile
+        ### compile
         max_iters_eva = self._max_iters
         self._max_iters = 1
         self.solve(save_result=False)
@@ -167,21 +221,12 @@ class UCRRSolver(SolverBase):
         """ Solve OCP via Riccati Recursion iteration.
 
         Args:
-            update_gamma (bool): If True, regularization coefficient is updated.
-            enable_line_search (bool=True): If true, enable line search.
-            max_iters (int): Number of max iterations.
             from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated and saved.
             save_result (bool): If true, results are saved.
-        
-        Returns:
-            ts (np.ndarray): Discretized Time at each stage.
-            xs (np.ndarray): Optimal state trajectory. (N + 1) * n_x.
-            us (np.ndarray): Optimal control trajectory. N * n_u.
-            is_success (bool): Success or not.
         """
         if from_opt is True:
             xs_guess = self._xs_opt
@@ -192,19 +237,20 @@ class UCRRSolver(SolverBase):
             us_guess = self._us_guess
             lamxs_guess = self._lamxs_guess
 
-        # derivatives of functions
+        ### derivatives of functions
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
 
-        # success flag of solver
+        ### success flag of solver
         is_success = False
 
         time_start = time.perf_counter()
 
-        # solve
+        ### solve
         xs, us, lamxs, ts, \
         is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
-        gamma_hist, alpha_hist, r_merit_hist = self._solve(
+        gamma_hist, alpha_hist, \
+        r_merit_hist, merit_hist, deriv_merit_hist = self._solve(
             f, fx, fu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N, 
@@ -217,7 +263,7 @@ class UCRRSolver(SolverBase):
         time_end = time.perf_counter()
         computation_time = time_end - time_start
 
-        # number of iterations
+        ### number of iterations
         noi = len(cost_hist) - 1
 
         if save_result:
@@ -235,18 +281,20 @@ class UCRRSolver(SolverBase):
             self._result['gamma_hist'] = gamma_hist
             self._result['alpha_hist'] = alpha_hist
             self._result['r_merit_hist'] = r_merit_hist
+            self._result['merit_hist'] = merit_hist
+            self._result['deriv_merit_hist'] = deriv_merit_hist
             self._result['xs_opt'] = xs
             self._result['us_opt'] = us
             self._result['lamxs_opt'] = lamxs
             self._result['ts'] = ts
 
-        # results
+        ### results
         if result:
             self.print_result()
-        # log
+        ### log
         if log:
             self.log_data()
-        # plot            
+        ### plot            
         if plot:
             self.plot_data(save=log)
 
@@ -263,52 +311,64 @@ class UCRRSolver(SolverBase):
         ):
         """ Riccati Recursion algorighm.
 
-        Returns: (xs, us, lamxs, ts, is_success,
-                  cost_hist, kkt_error_hist, dyn_error_hist,
-                  gamma_hist, alpha_hist)
-
+        Returns: 
+            (xs, us, lamxs, ts, 
+            is_success, cost_hist, kkt_error_hist, dyn_error_hist,
+            gamma_hist, alpha_hist,
+            r_merit_hist, merit_hist, deriv_merit_hist)
         """
         dt = T / N
         ts = np.array([t0 + i * dt for i in range(N + 1)])
 
         gamma = gamma_init
         r_merit = 1.0
+        merit = np.inf
+        deriv_merit = np.inf
 
-        # check initial KKT error and cost
+        ### check initial KKT error and cost
         kkt_error = eval_kkt_error(f, fx, fu, lx, lu, lfx, 
                                    t0, x0, dt, xs, us, lamxs)
         cost = eval_cost(l, lf, t0, dt, xs, us)
         dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
-        # cost history
+        ### cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
         cost_hist[0] = cost
 
-        # KKT error history
+        ### KKT error history
         kkt_error_hist = np.zeros(max_iters + 1, dtype=float)
         kkt_error_hist[0] = kkt_error
 
-        # dynamics feasibility history
+        ### dynamics feasibility history
         dyn_error_hist = np.zeros(max_iters + 1, dtype=float)
         dyn_error_hist[0] = dyn_error
 
-        # gamma history
+        ### gamma history
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
         gamma_hist[0] = gamma
 
-        # alpha history
+        ### alpha history
         alpha_hist = np.zeros(max_iters + 1, dtype=float)
         alpha_hist[0] = 0.0
 
+        ### penalty coefficient of constraints violation in merit function
         r_merit_hist = np.zeros(max_iters + 1, dtype=float)
         r_merit_hist[0] = 0.0
 
-        # success flag
+        ### merit history
+        merit_hist = np.zeros(max_iters + 1, dtype=float)
+        merit_hist[0] = merit
+
+        ### directional derivative of merit history
+        deriv_merit_hist = np.zeros(max_iters + 1, dtype=float)
+        deriv_merit_hist[0] = deriv_merit
+
+        ### success flag
         is_success = False
 
         for iters in range(1, max_iters + 1):
 
-            # stop condition
+            ### stop condition
             if kkt_error < kkt_tol:
                 is_success = True
 
@@ -316,7 +376,7 @@ class UCRRSolver(SolverBase):
                 iters -= 1
                 break
 
-            # compute blocks of pertubed KKT system
+            ### compute blocks of pertubed KKT system
             kkt_blocks = compute_linearlized_kkt_blocks(
                 f, fx, fu, lx, lu, lxx, lux, luu, lfx, lfxx,
                 t0, dt, xs, us, lamxs
@@ -325,45 +385,36 @@ class UCRRSolver(SolverBase):
             Qxxs, Quxs, Quus = kkt_blocks[2:5]
             x_bars, lx_bars, lu_bars = kkt_blocks[5:8]
 
-            # backward recursion
+            ### backward recursion
             Ps, ps, Ks, ks = backward_recursion(
                 As, Bs, Qxxs, Quxs, Quus, x_bars, lx_bars, lu_bars, gamma
             )
 
-            # forward recursion
+            ### forward recursion
             dxs, dus, dlamxs = forward_recursion(
                 Ps, ps, Ks, ks, As, Bs, x_bars, x0, xs[0]
             )
 
-            # line search
-            xs_new, us_new, lamxs_new, cost_new, kkt_error_new, alpha, r_merit_new \
-                = line_search(
+            ### line search
+            xs, us, lamxs, cost, kkt_error, alpha, \
+            r_merit, merit, deriv_merit = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
                     xs, us, lamxs, dxs, dus, dlamxs,
                     alpha_min, r_alpha, enable_line_search,
                     cost, kkt_error, r_merit
             )
 
-            # evaluate dynamics feasibility
+            ### evaluate dynamics feasibility
             dyn_error = eval_dynamics_error(f, t0, x0, dt, xs, us)
 
-            # modify regularization coefficient
+            ### modify regularization coefficient
             if not fix_gamma:
                 if alpha > alpha_min:
                     gamma /= r_gamma
                 else:
                     gamma *= r_gamma
-                # clip gamma
+                ### clip gamma
                 gamma = min(max(gamma, gamma_min), gamma_max)
-
-            # update variables.
-            xs = xs_new
-            us = us_new
-            lamxs = lamxs_new
-
-            kkt_error = kkt_error_new
-            cost = cost_new
-            r_merit = r_merit_new
 
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
@@ -371,8 +422,8 @@ class UCRRSolver(SolverBase):
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
             r_merit_hist[iters] = r_merit
-        else:
-            is_success = False
+            merit_hist[iters] = merit
+            deriv_merit_hist[iters] = deriv_merit
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
@@ -380,10 +431,13 @@ class UCRRSolver(SolverBase):
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
         r_merit_hist = r_merit_hist[0:iters + 1]
+        merit_hist = merit_hist[0: iters + 1]
+        deriv_merit_hist = deriv_merit_hist[0: iters + 1]
 
         return (xs, us, lamxs, ts, 
                 is_success, cost_hist, kkt_error_hist, dyn_error_hist,
-                gamma_hist, alpha_hist, r_merit_hist)
+                gamma_hist, alpha_hist,
+                r_merit_hist, merit_hist, deriv_merit_hist)
 
 
 @numba.njit
@@ -404,14 +458,14 @@ def compute_linearlized_kkt_blocks(
     n_x = xs.shape[1]
     n_u = us.shape[1]
 
-    # LHS
+    ### LHS
     As = np.empty((N, n_x, n_x))
     Bs = np.empty((N, n_x, n_u))
     Qxxs = np.empty((N + 1, n_x, n_x))
     Quxs = np.empty((N, n_u, n_x))
     Quus = np.empty((N, n_u, n_u))
     
-    # RHS
+    ### RHS
     x_bars = np.empty((N, n_x))
     lx_bars = np.empty((N + 1, n_x))
     lu_bars = np.empty((N, n_u))
@@ -419,7 +473,7 @@ def compute_linearlized_kkt_blocks(
     I = np.eye(n_x)
 
     for i in range(N):
-        # variables at stage i
+        ### variables at stage i
         t = t0 + i * dt
         x = xs[i]
         u = us[i]
@@ -467,11 +521,11 @@ def backward_recursion(
     Ks = np.empty((N, n_u, n_x))
     ks = np.empty((N, n_u))
 
-    # i = N
+    ### i = N
     Ps[N] = Qxxs[N]
     ps[N] = lx_bars[N]
 
-    # regularlization
+    ### regularlization
     Reg = gamma * np.eye(n_u)
 
     for i in range(N - 1, -1, -1):
@@ -544,7 +598,7 @@ def line_search(
 
     alpha = 1.0
 
-    # backtracking line search
+    ### backtracking line search
     while True:
 
         xs_new = xs + alpha * dxs
@@ -565,7 +619,7 @@ def line_search(
             l, lf, t0, dt, xs_new, us_new
         )
 
-        # stop condition
+        ### stop condition
         if merit_new < merit + c_armijo * alpha * deriv_merit:
             break
         if cost_new < cost:
@@ -573,14 +627,17 @@ def line_search(
         if (not np.isnan(cost_new)) and kkt_error_new < kkt_error:
             break
 
-        # reached minimum alpha
+        ### reached minimum alpha
         if (not enable_line_search) or (alpha < alpha_min):
             break
 
-        # update alpha
+        ### update alpha
         alpha *= r_alpha
     
-    return xs_new, us_new, lamxs_new, cost_new, kkt_error_new, alpha, r_merit
+    return (xs_new, us_new, lamxs_new, \
+            cost_new, kkt_error_new, 
+            alpha, 
+            r_merit, merit_new, deriv_merit)
 
 
 @numba.njit
@@ -603,7 +660,7 @@ def eval_merit_and_derivative(
     deriv_merit_constr += -np.linalg.norm(x0 - xs[0], 1)
 
     for i in range(N):
-        # variables
+        ### variables
         x = xs[i]
         x1 = xs[i + 1]
         u = us[i]
@@ -611,23 +668,23 @@ def eval_merit_and_derivative(
         du = dus[i]
         t = t0 + i * dt
 
-        # cost
+        ### cost
         merit_cost += l(x, u, t) * dt
 
-        # constraint
+        ### constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
 
-        # cost deriv
+        ### cost deriv
         deriv_merit_cost += lx(x, u, t) * dt @ dx
         deriv_merit_cost += lu(x, u, t) * dt @ du
 
-        # constraint deriv
+        ### constraint deriv
         deriv_merit_constr += -np.linalg.norm(x + f(x, u, t) * dt - x1, 1)
     
     merit_cost += lf(xs[N], t0 + N * dt)
     deriv_merit_cost += lfx(xs[N], t0 + N * dt) @ dxs[N]
 
-    # based on (3.5) of "An interior algorith for ..."
+    ### based on (3.5) of "An interior algorith for ..."
     if merit_constr > 1e-10:
         rho = 0.5
         r_merit_trial = deriv_merit_cost / ((1.0 - rho) * merit_constr)
@@ -661,15 +718,15 @@ def eval_merit(
         u = us[i]
         t = t0 + i * dt
 
-        # cost
+        ### cost
         merit_cost += l(x, u, t) * dt
 
-        # constraint
+        ### constraint
         merit_constr += np.linalg.norm(x + f(x, u, t) * dt - x1, ord=1)
     
     merit_cost += lf(xs[N], t0 + N * dt)
 
-    # merit function value
+    ### merit function value
     merit = merit_cost + r_merit * merit_constr
 
     return merit

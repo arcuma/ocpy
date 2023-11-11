@@ -13,7 +13,7 @@ def l1_directional_derivatives(x: np.ndarray, dx: np.ndarray):
     """
     n_x = x.shape[0]
 
-    # directional derivative of ||x||_1 along with dx.
+    ### directional derivative of ||x||_1 along with dx.
     d_n1 = 0.0
 
     for i in range(n_x):

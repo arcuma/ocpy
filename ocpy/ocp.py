@@ -36,21 +36,21 @@ class OCP:
         if n_h > 0:
             self._has_eq_constraints = True
 
-        # state and input (symbol)
+        ### state and input (symbol)
         self._x = symutils.define_vector('x', n_x)
         self._u = symutils.define_vector('u', n_u)
         self._t = sym.Symbol('t')
         self._dt = sym.Symbol('dt')
 
-        # dictionary holding symbols and values of constants
+        ### dictionary holding symbols and values of constants
         self._scalar_dict = {}
         self._vector_dict = {}
         self._matrix_dict = {}
 
-        # flags
+        ### flags
         self._is_lambdified = False
 
-        # in define()
+        ### in define()
         self._T = None
         self._N = None
         self._dt_value = None
@@ -69,7 +69,7 @@ class OCP:
         self._dh_sym = None
         self._is_ocp_defined = False
 
-        # in lambdify()
+        ### in lambdify()
         self._df_subs = None
         self._dl_subs = None
         self._dg_subs = None
@@ -130,26 +130,26 @@ class OCP:
         T = float(T)
         N = int(N)
 
-        # if l and lf are 1x1 Matrix, turn it into Symbol
+        ### if l and lf are 1x1 Matrix, turn it into Symbol
         if isinstance(l, sym.Matrix):
             l = l[0, 0]
         if isinstance(lf, sym.Matrix):
             lf = lf[0, 0]
 
-        # symbolic derivatives of dynamics and cost.
+        ### symbolic derivatives of dynamics and cost.
         if is_continuous:
             sym_dynamics = SymDynamics(x, u, t, f)
             sym_cost = SymCost(x, u, t, l, lf)
         else:
-            # if discrete, regard it discretized by forward-Euler method.
+            ### if discrete, regard it discretized by forward-Euler method.
             sym_dynamics = SymDynamics(x, u, t, (f - x) / dt)
             sym_cost = SymCost(x, u, t, l / dt, lf)
-        # (f, fx, fu, fxx, fux, fuu)
+        ### (f, fx, fu, fxx, fux, fuu)
         df_sym = sym_dynamics.get_derivatives()
-        # (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
+        ### (l, lx, lu, lxx, lux, luu, lf, lfx, lfxx)
         dl_sym = sym_cost.get_derivatives()
 
-        # inequality constraints
+        ### inequality constraints
         if g is not None:
             sym_ineq_constraints = SymIneqConstraints(x, u, t, g)
             dg_sym = sym_ineq_constraints.get_derivatives()
@@ -157,7 +157,7 @@ class OCP:
             self._sym_ineq_constraints = sym_ineq_constraints
             self._dg_sym = dg_sym
 
-        # equality constraints
+        ### equality constraints
         if h is not None:
             sym_eq_constraints = SymEqConstraints(x, u, t, h)
             dh_sym = sym_eq_constraints.get_derivatives()
@@ -165,7 +165,7 @@ class OCP:
             self._sym_ineq_constraints = sym_eq_constraints
             self._dh_sym = dh_sym
 
-        # simplify
+        ### simplify
         if simplification:
             symutils.simplify(df_sym)
             symutils.simplify(dl_sym)
@@ -174,7 +174,7 @@ class OCP:
             if self._has_eq_constraints:
                 symutils.simplify(dh_sym)
 
-        # hold
+        ### hold
         self._t0 = t0
         self._x0 = x0
         self._T = T
@@ -189,7 +189,7 @@ class OCP:
         self._dl_sym = dl_sym
         self._is_ocp_defined = True
         
-        # generate lambda function.
+        ### generate lambda function.
         self.lambdify()
 
     def define_unconstrained(self,
@@ -229,21 +229,21 @@ class OCP:
         t = self._t
         dt = self._dt
 
-        # dynamics
+        ### dynamics
         df_subs = symutils.substitute_constants_list(
             self._df_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_dynamics = NumDynamics(x, u, t, dt, *df_subs)
         df_num = num_dynamics.get_derivatives()
 
-        # cost
+        ### cost
         dl_subs = symutils.substitute_constants_list(            
             self._dl_sym, self._scalar_dict, self._vector_dict, self._matrix_dict,
             self._dt, self._dt_value)
         num_cost = NumCost(x, u, t, dt, *dl_subs)
         dl_num = num_cost.get_derivatives()
 
-        # inequality constraints
+        ### inequality constraints
         if self._has_ineq_constraints:
             dg_subs = symutils.substitute_constants_list(
                 self._dg_sym, self._scalar_dict, self._vector_dict,
@@ -257,7 +257,7 @@ class OCP:
             self._num_ineq_constraints = num_ineq_constraints
             self._dg_num = dg_num
 
-        # equality constraints
+        ### equality constraints
         if self._has_eq_constraints:
             dh_subs = symutils.substitute_constants_list(
                 self._dh_sym, self._scalar_dict, self._vector_dict,
@@ -271,7 +271,7 @@ class OCP:
             self._num_eq_constrants = num_eq_constraints
             self._dh_num = dh_num
 
-        # hold
+        ### hold
         self._df_subs = df_subs
         self._num_dynamics = num_dynamics
         self._df_num = df_num
@@ -363,7 +363,7 @@ class OCP:
         assert self._is_ocp_defined
         return self._dt_value
 
-    # symbolic
+    ### symbolic
     def get_df_symbolic(self) -> tuple:
         """ Return symbolic derivatives of dynamics.
 
@@ -402,7 +402,7 @@ class OCP:
         assert self._is_ocp_defined
         return self._dg_sym
     
-    # constants-substituted symbolic
+    ### constants-substituted symbolic
     def get_df_symbolic_substituted(self) -> tuple:
         """ Return constants-substituted symbolic derivatives of dynamics.
 
@@ -443,7 +443,7 @@ class OCP:
         assert self._is_lambdified
         return self._dh_subs
 
-    # numba-numpy lambda functions
+    ### numba-numpy lambda functions
     def get_df(self) -> tuple:
         """ Return derivatives of dynamics.
 

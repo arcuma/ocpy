@@ -23,55 +23,55 @@ class SolverBase(abc.ABC):
                              self._sim_name)
         self._solver_name = ''
 
-        # dimensions of state and input.
+        ### dimensions of state and input.
         self._n_x = ocp.get_n_x()
         self._n_u = ocp.get_n_u()
 
-        # initial time and state
+        ### initial time and state
         self._t0 = ocp.get_t0()
         self._x0 = ocp.get_x0()
 
-        # Horizon length, num of discretization, time step.
+        ### Horizon length, num of discretization, time step.
         self._T = ocp.get_T()
         self._N = ocp.get_N()
         self._dt = self._T / self._N
 
-        # derivatives of functions
+        ### derivatives of functions
         self._df = ocp.get_df()
         self._dl = ocp.get_dl()
         self._f, self._fx, self._fu, self._fxx, self._fux, self._fuu = self._df
         self._l, self._lx, self._lu, self._lxx, self._lux, self._luu, \
             self._lf, self._lfx, self._lfxx = self._dl
 
-        # line search parameter
+        ### line search parameter
         self._enable_line_search = True
         self._alpha_min = 1e-4
         self._r_alpha = 0.5
 
-        # regularization value.
+        ### regularization value.
         self._fix_gamma = True
         self._gamma_init = 0.0
         self._r_gamma = 10.0
         self._gamma_min = 0.0
         self._gamma_max = 1e3
 
-        # solver parameters
+        ### solver parameters
         self._fix_iters = False
         self._min_iters = 1
         self._max_iters = 1000
 
-        # flag
+        ### flag
         self._is_single_shooting = True
         self._initialized = False
 
-        # optimal trajectory
+        ### optimal trajectory
         self._xs_opt = np.zeros((self._N + 1, self._n_x))
         self._us_opt = np.zeros((self._N, self._n_u))
 
-        # time grids
+        ### time grids
         ts = np.array([self._t0 + i*self._dt for i in range(self._N + 1)])
 
-        # result (success flag, NoI, ...)
+        ### result (success flag, NoI, ...)
         self._result = {}
         self._result['is_success'] = None
         self._result['noi'] = None
