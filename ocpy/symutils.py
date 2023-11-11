@@ -67,7 +67,7 @@ def diff_matrix(M: sym.Matrix, x: sym.Matrix) -> sym.Array:
         no longer a sym.Matrix.
     """
     Mx = sym.diff(M, x.T)[0]
-    # For MutableDenseNDimArray don't have attribute subs()
+    ### For MutableDenseNDimArray don't have attribute subs()
     return sym.ImmutableDenseNDimArray(Mx)
 
 
@@ -220,25 +220,25 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
     if numba_njit:
         if isinstance(f, sym.Matrix):
             m, n = f.shape
-            # for needed that numba know datatype is float.
+            ### for needed that numba know datatype is float.
             f += 1e-128*np.ones((m, n))
-            # convert into 1d array
+            ### convert into 1d array
             if (m == 1 or n == 1) and dim_reduction:
                 if n == 1:
                     f = f.T
                 f = sym.Array(f)[0]
                 f_num = sym.lambdify(args, f, modules='numpy')
                 return njit(f_num)
-                # expired
+                ### expired
                 # f_numpy = lambda *args: np.array(f_list_njit(*args))
                 # return njit(f_numpy)
         elif isinstance(f, sym.Array):
             l, m, n = f.shape
             f = sym.MutableDenseNDimArray(f)
-            # for needed that numba know datatype is float.
+            ### for needed that numba know datatype is float.
             f += 1e-128 * np.ones((l, m, n))
             f_list_njit = njit(sym.lambdify(args, f, modules='numpy'))
-            # for 3D array, this operation is needed to turn into ndarray.
+            ### for 3D array, this operation is needed to turn into ndarray.
             f_num = lambda *args: np.array(f_list_njit(*args))
             return njit(f_num)
         f_num = sym.lambdify(args, f, modules='numpy')
@@ -246,13 +246,13 @@ def lambdify(args: list, f: sym.Symbol | sym.Matrix | sym.Array,
     else:
         if isinstance(f, sym.Matrix):
             m, n = f.shape
-            # convert into 1d array
+            ### convert into 1d array
             if (m == 1 or n == 1) and dim_reduction:
                 if n == 1:
                     f = f.T
                 f = sym.Array(f)[0]
                 f = sym.lambdify(args, f, "numpy")
-                # unless this operation, f_num returns list, not ndarray. 
+                ### unless this operation, f_num returns list, not ndarray. 
                 f_num = lambda *args: np.array(f(*args))
                 return f_num
         elif isinstance(f, sym.Array):

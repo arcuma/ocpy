@@ -31,7 +31,7 @@ class MPC:
         self._t0 = self._ocp.get_t0()
         self._x0 = self._ocp.get_x0()
 
-        # dict containing result
+        ### dict containing result
         self._result_mpc = {}
         self._result_mpc['xs'] = np.ndarray(0)
         self._result_mpc['us'] = np.ndarray(0)
@@ -107,23 +107,23 @@ class MPC:
 
         ts_real = np.arange(t, t + T_sim + sampling_time*1e-6, sampling_time)
 
-        # record real trajectory of state and control.
+        ### record real trajectory of state and control.
         xs_real = []
         us_real = []
 
-        # history of NOI
+        ### history of NOI
         noi_hist = []
         computation_time_hist = []
 
-        # for feedback delay
+        ### for feedback delay
         u = solver._us_guess[0, :]
 
-        # MPC
+        ### MPC
         for i, t in enumerate(ts_real):
 
             if feedback_delay:
                 x_next = self.RK4(f, x, u, t, sampling_time)
-                # save
+                ### save
                 xs_real.append(x)
                 us_real.append(u)
 
@@ -131,27 +131,27 @@ class MPC:
 
             solver.solve(from_opt=True)
 
-            # In MPC, we use initial value of optimal input trajectory.
+            ### In MPC, we use initial value of optimal input trajectory.
             us_opt = solver.get_us_opt()
             u = us_opt[0]
 
             if not feedback_delay:
                 x_next = self.RK4(f, x, u, t, sampling_time)
-                # save
+                ### save
                 xs_real.append(x)
                 us_real.append(u)
 
-            # get result
+            ### get result
             result = solver.get_result()
             noi = result['noi']
             computation_time = result['computation_time']
             noi_hist.append(noi)
             computation_time_hist.append(computation_time)
 
-            # update current state
+            ### update current state
             x = x_next
 
-        # convert into numpy
+        ### convert into numpy
         xs_real = np.array(xs_real, dtype=float)
         us_real = np.array(us_real, dtype=float)
 

@@ -18,7 +18,7 @@ class CartPoleAnimator:
             log_dir (str): Direcory in which logs are stored.
             file_name (str): Animation is saved as (filename).mp4.
         """
-        # Load data
+        ### Load data
         self._log_dir = log_dir
         self._file_name = file_name
         self._xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
@@ -28,19 +28,19 @@ class CartPoleAnimator:
             self._xs = self._xs.reshape((-1, 1))
         if self._us.ndim == 1:
             self._us = self._us.reshape((-1, 1))
-        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
+        ### when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
         if self._us.shape[0] == self._xs.shape[0] - 1:
             self._us = np.append(self._us, [self._us[-1]], axis=0)
         self._n_x = self._xs.shape[1]
         self._n_u = self._us.shape[1]
         self._N = self._ts.size - 1
         self._dtau = self._ts[1] - self._ts[0]
-        # cartpole
+        ### cartpole
         self._cart_width = 0.5
         self._cart_height = 0.25
         self._pole_length = 0.5
         self._ball_r = 0.050
-        # drawing range
+        ### drawing range
         x_axis_lim = max(abs(np.amax(self._xs[:, 0])),
                          abs(np.amin(self._xs[:, 0])),
                          1.0) + self._pole_length + self._ball_r
@@ -51,7 +51,7 @@ class CartPoleAnimator:
         aspect = 9/16
         self._y_min = -scale * r * aspect
         self._y_max = +scale * (1-r) * aspect
-        # frame skip rate
+        ### frame skip rate
         self._skip_rate = 1
         self._total_frames = (int)(self._ts.size / self._skip_rate)
     
@@ -62,27 +62,27 @@ class CartPoleAnimator:
             save (bool): If True, animation is saved to log_dir.
             skip_rate (int): Skip rate.
         """
-        # frame skip
+        ### frame skip
         self._skip_rate = skip_rate
         self._total_frames = (int)(self._ts.shape[0] / skip_rate)
         self._fig = plt.figure(figsize=(16, 9))
         self._ax = plt.axes(xlim=(self._x_min, self._x_max),
                             ylim=(self._y_min, self._y_max))
-        # 1:1 aspect ration
+        ### 1:1 aspect ration
         self._ax.set_aspect('equal')
         state = self._xs[0, :]
         control = self._us[0, :]
-        # cart position
+        ### cart position
         cart_center_x = state[0]
         cart_ll_x = cart_center_x - self._cart_width / 2
         cart_ll_y = 0
         cart_center_y = cart_ll_y + self._cart_height / 2
-        # cart
+        ### cart
         self._cart = patches.Rectangle(
             xy=(cart_ll_x, cart_ll_y), width=self._cart_width,
             height=self._cart_height
             )
-        # pole
+        ### pole
         l = self._pole_length
         pole_s_x = cart_center_x
         pole_s_y = cart_center_y
@@ -93,11 +93,11 @@ class CartPoleAnimator:
             ec='blue',
             linewidth=3.0
             )
-        # weight
+        ### weight
         self._ball = patches.Circle(
             xy=(pole_t_x, pole_t_y), radius=self._ball_r
             )
-        # force arrow
+        ### force arrow
         self._arrow = patches.Arrow(
             x=pole_s_x,
             y=pole_s_y,
@@ -107,13 +107,13 @@ class CartPoleAnimator:
             color='red',
             alpha=0.5
             )
-        # add shapes
+        ### add shapes
         self._ax.add_patch(self._cart)
         self._ax.add_patch(self._ball)        
         self._ax.add_patch(self._pole)
         self._ax.add_patch(self._arrow)
         self._groud = self._ax.axhline(y=0)
-        # time display
+        ### time display
         self._time_text = self._ax.text(
             0.9, 0.05,
             f'{self._ts[0]} [s]',
@@ -149,25 +149,25 @@ class CartPoleAnimator:
     def _update_animation(self, i):
         """ Callback function handed to FuncAnimation.
         """
-        # current frame
+        ### current frame
         frame = i * self._skip_rate
         state = self._xs[frame, :]
         control = self._us[frame, :]
-        # cart position
+        ### cart position
         cart_center_x = state[0]
         cart_ll_x = cart_center_x - self._cart_width / 2
         cart_ll_y = 0
         cart_center_y = cart_ll_y + self._cart_height / 2
         self._cart.set_x(cart_ll_x)
-        # pole position
+        ### pole position
         pole_s_x = cart_center_x
         pole_s_y = cart_center_y
         pole_t_x = pole_s_x + self._pole_length * np.sin(state[1])
         pole_t_y = pole_s_y - self._pole_length * np.cos(state[1])
         self._pole.set_xy([[pole_s_x, pole_s_y], [pole_t_x, pole_t_y]])
-        # weight position
+        ### weight position
         self._ball.set_center((pole_t_x, pole_t_y))
-        # remake and repatch arrow
+        ### remake and repatch arrow
         self._arrow.remove()
         self._arrow = patches.Arrow(
             x=pole_s_x,
@@ -179,11 +179,11 @@ class CartPoleAnimator:
             alpha=0.5
         )
         self._ax.add_patch(self._arrow)
-        # time text
+        ### time text
         self._time_text.set_text(
             '{0:.1f} [s]'.format(frame * self._dtau)
             )
-        # variable text
+        ### variable text
         self._variable_text.set_text(
             r'$x: $'+f'{state[0]:5.3f}\n'
             +r'$\theta$: '+f'{state[1]:.3f}\n'
@@ -214,15 +214,15 @@ class HexacopterAnimator:
             self._xs = self._xs.reshape((-1, 1))
         if self._us.ndim == 1:
             self._us = self._us.reshape((-1, 1))
-        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
+        ### when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
         if self._us.shape[0] == self._xs.shape[0] - 1:
             self._us = np.append(self._us, [self._us[-1]], axis=0)
         self._dt = self._ts[1] - self._ts[0]
-        # size of hexacopter
+        ### size of hexacopter
         self._r_body=0.10
         self._r_prop=0.05
         self._l_arm=0.2
-        # frame skip rate
+        ### frame skip rate
         self._skip_rate = 1
         self._total_frames = (int)(self._ts.size / self._skip_rate)      
 
@@ -233,10 +233,10 @@ class HexacopterAnimator:
             save (bool): If True, animation is saved to log_dir.
             skip_rate (int): Skip rate.
         """
-        # frame skip
+        ### frame skip
         self._skip_rate = skip_rate
         self._total_frames = (int)(self._ts.shape[0] / skip_rate)
-        # matplotlib
+        ### matplotlib
         self._fig = plt.figure(figsize=(13, 13))
         self._ax = self._fig.add_subplot(111, projection='3d')
         self._ax.set_xlabel('x')
@@ -245,22 +245,22 @@ class HexacopterAnimator:
         self._ax.set_xlim(-4.0, 4.0)
         self._ax.set_ylim(-4.0, 4.0)
         self._ax.set_zlim(-0.0, 8.0)
-        # initial state
+        ### initial state
         state = self._xs[0, :]
-        # drone
+        ### drone
         self._lines = []
         for i in range(6):
             line = art3d.Line3D([], [], [], color='tab:blue', linewidth=3.0)
             self._ax.add_line(line)
             self._lines.append(line)
-        # body frame
+        ### body frame
         self._frame = [0] * 3
         self._framecolor = ['r', 'g', 'b']
         for i in range(3):
             self._frame[i] = self._ax.quiver(
                 *np.zeros(3), *np.zeros(3), color=self._framecolor[i]
             )
-        # time text
+        ### time text
         self._ax.tick_params(color='white')
         self._time_text = self._ax.text2D(
             0.85,
@@ -298,7 +298,7 @@ class HexacopterAnimator:
         pos = state[0:3]
         rpy = state[3:6]
         wRb = self.rpy_to_rotmat(rpy)
-        # drone
+        ### drone
         for i in range(6):
             theta = (1/6 + i/3) * np.pi
             bl = self._l_arm * np.array([np.cos(theta), np.sin(theta), 0])
@@ -308,14 +308,14 @@ class HexacopterAnimator:
                                        [pos[1], dest[1]],
                                        [pos[2], dest[2]]
             )
-        # body frame
+        ### body frame
         for i in range(3):
             self._frame[i].remove()
             dest = wRb[:, i] * 0.8
             self._frame[i] = self._ax.quiver(
                 *pos, *dest, color=self._framecolor[i]
             )
-        # time text
+        ### time text
         self._time_text.set_text(f'{t:.1f} [s]')
         
     @staticmethod
@@ -337,7 +337,7 @@ class PendubotAnimator:
             log_dir (str): Directory in which logs are stored.
             file_name (str): Animation is saved as (filename).mp4
         """
-        # Load data
+        ### Load data
         self._log_dir = log_dir
         self._file_name = file_name
         self._xs = np.genfromtxt(join(log_dir, 'x_log.txt'))
@@ -347,22 +347,22 @@ class PendubotAnimator:
             self._xs = self._xs.reshape((-1, 1))
         if self._us.ndim == 1:
             self._us = self._us.reshape((-1, 1))
-        # when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
+        ### when OC, us=(u0, ... ,uN-1) while xs=(x0, ..., xN)
         if self._us.shape[0] == self._xs.shape[0] - 1:
             self._us = np.append(self._us, [self._us[-1]], axis=0)
         self._n_x = self._xs.shape[1]
         self._n_u = self._us.shape[1]
         self._N = self._ts.size - 1
         self._dtau = self._ts[1] - self._ts[0]
-        # drawing range
+        ### drawing range
         self._x_min = -1
         self._x_max = 1
         self._y_min = -0.75
         self._y_max = 0.75
-        # two link arm
+        ### two link arm
         self._l1 = 0.3
         self._l2 = 0.3
-        # frame skip rate
+        ### frame skip rate
         self._skip_rate = 1
         self._total_frames = (int)(self._ts.size / self._skip_rate)
 
@@ -373,18 +373,18 @@ class PendubotAnimator:
             save (bool): If True, animation is saved to log_dir.
             skip_rate (int): Skip rate.
         """
-        # frame
+        ### frame
         self._skip_rate = skip_rate
         self._total_frames = (int)(self._ts.size / self._skip_rate)
         self._fig = plt.figure(figsize=(12, 9))
         self._ax = plt.axes(xlim=(self._x_min, self._x_max),
                             ylim=(self._y_min, self._y_max))
-        # aspect ratio
+        ### aspect ratio
         self._ax.set_aspect('equal')
-        # x0 and u0
+        ### x0 and u0
         state = self._xs[0, :]
         control = self._us[0, :]
-        # link1
+        ### link1
         theta1 = state[0]
         link1_sx = 0
         link1_sy = 0
@@ -395,7 +395,7 @@ class PendubotAnimator:
             ec='tab:blue',
             linewidth=6.0
         )
-        # link2
+        ### link2
         theta2 = state[1]
         link2_sx = link1_tx
         link2_sy = link1_ty
@@ -406,10 +406,10 @@ class PendubotAnimator:
             ec='tab:green',
             linewidth=6.0
         )
-        # add patch to ax
+        ### add patch to ax
         self._ax.add_patch(self._link1)
         self._ax.add_patch(self._link2)
-        # display
+        ### display
         self._time_text = self._ax.text(
             0.9, 0.05,
             f'{self._ts[0]} [s]',
@@ -433,7 +433,7 @@ class PendubotAnimator:
             interval=1000*self._dtau*self._skip_rate,
             blit=True
             )
-        # save movie
+        ### save movie
         if save:
             anim.save(join(self._log_dir, self._file_name) + '.mp4', dpi=120),
             writer='pillow',
@@ -445,29 +445,29 @@ class PendubotAnimator:
     def _update_animation(self, i):
         """ Callback function handed to FuncAnimation.
         """
-        # current frame
+        ### current frame
         frame = i * self._skip_rate
         state = self._xs[frame, :]
         control = self._us[frame, :]
-        # link1
+        ### link1
         theta1 = state[0]
         link1_sx = 0
         link1_sy = 0
         link1_tx = link1_sx + self._l1 * np.sin(theta1)
         link1_ty = link1_sy - self._l1 * np.cos(theta1)
         self._link1.set_xy([[link1_sx, link1_sy], [link1_tx, link1_ty]])
-        # link2
+        ### link2
         theta2 = state[1]
         link2_sx = link1_tx
         link2_sy = link1_ty
         link2_tx = link2_sx + self._l2 * np.sin(theta1 + theta2)
         link2_ty = link2_sy - self._l2 * np.cos(theta1 + theta2)
         self._link2.set_xy([[link2_sx, link2_sy], [link2_tx, link2_ty]])
-        # time text
+        ### time text
         self._time_text.set_text(
             '{0:.1f} [s]'.format(frame * self._dtau)
             )
-        # variable text
+        ### variable text
         self._variable_text.set_text(
             r'$\theta_1: $'+f'{state[0]:.3f}\n'
             +r'$\theta_2$: '+f'{state[1]:.3f}\n'

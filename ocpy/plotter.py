@@ -47,7 +47,7 @@ class Plotter:
         self._n_u = self._us.shape[1]
         self._num_graphs = self._n_x + self._n_u + 1
 
-        # set style
+        ### set style
         sns.set_style('ticks')
         sns.set_palette('deep')
         sns.set_context('paper')
@@ -106,7 +106,7 @@ class Plotter:
             show (bool): If true, display graph.
             save (bool): If true, save graph to log_dir.
         """
-        # variables
+        ### variables
         n_x = self._n_x
         n_u = self._n_u
         N_x = self._N_x
@@ -118,22 +118,22 @@ class Plotter:
         costs = self._costs
         kkts = self._kkts
 
-        # number of columns of graph
+        ### number of columns of graph
         cols = math.ceil(math.sqrt(n_x + n_u))
-        # number of rows of graph. 
+        ### number of rows of graph. 
         rows_x = math.ceil(n_x / cols)
         rows_u = math.ceil(n_u / cols)
         rows = rows_x + rows_u + 1
-        # rows * cols 
+        ### rows * cols 
         fig, axes = plt.subplots(rows, cols)
 
-        # figure size
+        ### figure size
         fig.set_figheight(fig_scale * rows)
         fig.set_figwidth(2.5 * fig_scale * cols)
-        # space between graphs
+        ### space between graphs
         fig.subplots_adjust(wspace=wspace_scale/cols, hspace=hspace_scale/rows)
 
-        # state
+        ### state
         for i in range(rows_x):
             for j in range(cols):
                 idx = i*cols + j
@@ -148,7 +148,7 @@ class Plotter:
                 else:
                     fig.delaxes(axes[i][j])
 
-        # control
+        ### control
         for i in range(rows_x, rows_x + rows_u):
             for j in range(cols):
                 idx = (i - rows_x)*cols + j
@@ -163,7 +163,7 @@ class Plotter:
                 else:
                     fig.delaxes(axes[i][j])
 
-        # costs and kkts
+        ### costs and kkts
         for j in range(cols):
             i = rows_x + rows_u
             if j == 0 and costs is not None:
@@ -203,7 +203,7 @@ class Plotter:
             plt.show()
 
 
-# test
+### test
 if __name__ == '__main__':
     # sim_name = 'hexacopter'
     sim_name = 'cartpole'

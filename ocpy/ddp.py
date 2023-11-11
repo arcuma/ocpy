@@ -28,7 +28,7 @@ class DDPSolver(SolverBase):
         self._solver_name = 'DDP'
         self._is_ddp = ddp
 
-        # tolerance (stop condition)
+        ### tolerance (stop condition)
         self._stop_tol = 1e-3
 
         self._us_guess = np.zeros((self._N, self._n_u))
@@ -140,7 +140,7 @@ class DDPSolver(SolverBase):
         """
         print("Initializing solver...")
 
-        # compile
+        ### compile
         max_iters_eva = self._max_iters
         self._max_iters = 1
         self.solve(save_result=False)
@@ -156,37 +156,28 @@ class DDPSolver(SolverBase):
         """ Solve OCP via DDP iteration.
 
         Args:
-            update_gamma (bool): If True, regularization coefficient is updated.
-            enable_line_search (bool=True): If true, enable line searching.
-            max_iters (int): Maximum numbar of iterations.
             from_opt (bool=False): If true, previous solution is used \
                 as initial guess. Mainly for MPC.
             result (bool): If true, summary of result is printed.
             log (bool): If true, results are logged to log_dir.
             plot (bool): If true, graphs are generated (and saved if log==True).
             save_result (bool): If true, results are saved.
-        
-        Returns:
-            xs (np.ndarray): optimal state trajectory. (N + 1) * n_x
-            us (np.ndarray): optimal control trajectory. N * n_u
-            ts (np.ndarray): Discretized Time at each stage.
-            is_success (bool): Success or not.
         """
         if from_opt is True:
             us_guess = self._us_opt
         else:
             us_guess = self._us_guess
 
-        # derivatives functions.
+        ### derivatives functions.
         f, fx, fu, fxx, fux, fuu = self._df
         l, lx, lu, lxx, lux, luu, lf, lfx, lfxx = self._dl
 
-        # success flag
+        ### success flag
         is_success = False
 
         time_start = time.perf_counter()
 
-        # solve
+        ### solve
         xs, us, ts, \
         is_success, cost_hist, gamma_hist, alpha_hist = self._solve(
             f, fx, fu, fxx, fux, fuu,
@@ -201,7 +192,7 @@ class DDPSolver(SolverBase):
         time_end = time.perf_counter()
         computation_time = time_end - time_start
 
-        # number of iterations
+        ### number of iterations
         noi = len(cost_hist) - 1
         if save_result:
             self._xs_opt = xs
@@ -218,13 +209,13 @@ class DDPSolver(SolverBase):
             self._result['us_opt'] = us
             self._result['ts'] = ts
 
-        # result
+        ### result
         if result:
             self.print_result()
-        # log
+        ### log
         if log:
             self.log_data()
-        # plot
+        ### plot
         if plot:
             self.plot_data(save=log)
 
@@ -241,33 +232,34 @@ class DDPSolver(SolverBase):
         """ DDP algorithm.
 
         Returns:
-            (xs, us, ts, is_success, cost_hist, gamma_hist, alpha_hist)
+            (xs, us, ts, 
+            is_success, cost_hist, gamma_hist, alpha_hist)
         """
         dt = T / N
         us = us_guess
         gamma = gamma_init
 
-        # initial rollout
+        ### initial rollout
         xs, cost = rollout(f, l, lf, t0, x0, dt, us)
 
-        # cost history
+        ### cost history
         cost_hist = np.zeros(max_iters + 1, dtype=float)
         cost_hist[0] = cost
 
-        # gamma history
+        ### gamma history
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
         gamma_hist[0] = gamma
 
-        # alpha history
+        ### alpha history
         alpha_hist = np.zeros(max_iters + 1, dtype=float)
         alpha_hist[0] = 0.0
 
         is_success = False
 
-        # main iteration
+        ### main iteration
         for iters in range(1, max_iters + 1):
 
-            # backward pass
+            ### backward pass
             ks, Ks, delta_V = backward_pass(
                 fx, fu, fxx, fux, fuu,
                 lx, lu, lxx, lux, luu, lfx, lfxx,
@@ -275,7 +267,7 @@ class DDPSolver(SolverBase):
                 gamma, is_ddp
             )
 
-            # stop criterion
+            ### stop criterion
             if np.abs(delta_V) < stop_tol:
                 is_success = True
 
@@ -283,20 +275,20 @@ class DDPSolver(SolverBase):
                 iters -= 1
                 break
             
-            # step size
+            ### step size
             alpha = 1.0
             success_line_search = False
 
-            # line search
+            ### line search
             while True:
-                # forward pass
+                ### forward pass
                 xs_new, us_new, cost_new = forward_pass(
                     f, l, lf,
                     t0, dt, xs, us,
                     ks, Ks, alpha
                 )
 
-                # stop condition of line search
+                ### stop condition of line search
                 if cost_new < cost:
                     success_line_search = True
                     break
@@ -304,19 +296,19 @@ class DDPSolver(SolverBase):
                 if (not enable_line_search) or (alpha < alpha_min):
                     break
                 
-                # update alpha
+                ### update alpha
                 alpha *= r_alpha
 
-            # modify regularization coefficient
+            ### modify regularization coefficient
             if not fix_gamma:
                 if success_line_search:
                     gamma *= r_gamma
                 else:
                     gamma /= r_gamma
-                # clip gamma
+                ### clip gamma
                 gamma = min(max(gamma, gamma_min), gamma_max)
 
-            # update trajectory
+            ### update trajectory
             xs = xs_new
             us = us_new
             cost = cost_new
@@ -422,26 +414,26 @@ def backward_pass(fx, fu, fxx, fux, fuu,
     n_u = us.shape[1]
     I = np.eye(n_x)
 
-    # feedforward term and feedback coeff.
+    ### feedforward term and feedback coeff.
     ks = np.empty((N, n_u))
     Ks = np.empty((N, n_u, n_x))
 
-    # value function at stage i+1
+    ### value function at stage i+1
     Vx = lfx(xs[N], t0 + T)
     Vxx = lfxx(xs[N], t0 + T)
 
-    # expected cost change of all stage
+    ### expected cost change of all stage
     delta_V = 0.0
 
-    # Regularization matrix
+    ### Regularization matrix
     Reg = gamma * np.eye(n_u)
 
     for i in range(N - 1, -1, -1):
-        # variables at this stage
+        ### variables at this stage
         t = t0 + i*dt
         x, u = xs[i], us[i]
 
-        # derivatives of stage i
+        ### derivatives of stage i
         fx_i = I + fx(x, u, t) * dt
         fu_i = fu(x, u, t) * dt
         if is_ddp:
@@ -454,7 +446,7 @@ def backward_pass(fx, fu, fxx, fux, fuu,
         lux_i = lux(x, u, t) * dt
         luu_i = luu(x, u, t) * dt
 
-        # action value derivatives
+        ### action value derivatives
         Qx = lx_i + fx_i.T @ Vx
         Qu = lu_i + fu_i.T @ Vx
         if is_ddp:
@@ -466,14 +458,14 @@ def backward_pass(fx, fu, fxx, fux, fuu,
             Qux = lux_i + fu_i.T @ Vxx @ fx_i
             Quu = luu_i + fu_i.T @ Vxx @ fu_i
 
-        # feedforward and feedback terms
+        ### feedforward and feedback terms
         Quu_inv = np.linalg.inv(Quu + Reg)
         k = -Quu_inv @ Qu
         K = -Quu_inv @ Qux
         ks[i] = k
         Ks[i] = K
 
-        # value function of stage i, passed to stage i-1.
+        ### value function of stage i, passed to stage i-1.
         delta_V_i = 0.5 * k.T @ Quu @ k + k.T @ Qu
         Vx = Qx - K.T @ Quu @ k
         Vxx = Qxx - K.T @ Quu @ K
@@ -511,7 +503,7 @@ def forward_pass(f, l, lf,
     N = us.shape[0]
     T = N * dt
 
-    # new (xs, us) and cost value.
+    ### new (xs, us) and cost value.
     xs_new = np.empty(xs.shape)
     xs_new[0] = xs[0]
     us_new = np.empty(us.shape)
@@ -522,7 +514,7 @@ def forward_pass(f, l, lf,
         us_new[i] = us[i] + alpha * ks[i] + Ks[i] @ (xs_new[i] - xs[i])
         xs_new[i + 1] = xs_new[i] + f(xs_new[i], us_new[i], t) * dt
         cost_new += l(xs_new[i], us_new[i], t) * dt
-    # terminal cost
+    ### terminal cost
     cost_new += lf(xs_new[N], t0 + T)
 
     return xs_new, us_new, cost_new
