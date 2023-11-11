@@ -222,6 +222,18 @@ class MPC:
 
         plotter = Plotter(self._log_dir, xs, us, ts)
         plotter.plot(save=save)
+    
+    def print_detail(self):
+        """ plot result of some parameters.
+        """
+        import matplotlib.pyplot as plt
+
+        result = self.get_result()
+
+        noi_hist = result['noi_hist']
+        plt.plot(noi_hist)
+        plt.title('NOI hist')
+        plt.show()
 
     def get_result(self):
         """ Get result.

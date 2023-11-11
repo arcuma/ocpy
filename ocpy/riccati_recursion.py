@@ -3,6 +3,7 @@ import numpy as np
 import numba
 import abc
 import time
+import matplotlib.pyplot as plt
 
 from ocpy import symutils
 from ocpy.ocp import OCP
@@ -57,9 +58,14 @@ class RiccatiRecursionSolver(SolverBase):
         self._result['kkt_error_mu_hist'] = None
         self._result['dyn_error_hist'] = None
         self._result['gamma_hist'] = None
-        self._result['alpha_hist'] = None
+        self._result['alpha_primal_hist'] = None
+        self._result['alpha_dual_hist'] = None
+        self._result['alpha_s_max_hist'] = None
+        self._result['alpha_lams_max_hist'] = None
         self._result['mu_hist'] = None
         self._result['r_merit_hist'] = None
+        self._result['merit_hist'] = None
+        self._result['deriv_merit_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
         self._result['ss_opt'] = np.ndarray(0)
@@ -248,6 +254,79 @@ class RiccatiRecursionSolver(SolverBase):
         plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
+    
+    def plot_detail(self):
+        """ plot result of some parameters.
+        """
+        result = self.get_result()
+
+        cost_hist = result['cost_hist']
+        plt.plot(cost_hist)
+        plt.title('cost')
+        plt.show()
+
+        kkt_error_hist = result['kkt_error_hist']
+        kkt_error_mu_hist = result['kkt_error_mu_hist']
+        plt.yscale('log')
+        plt.plot(kkt_error_hist, label='kkt_error')
+        plt.plot(kkt_error_mu_hist, label='kkt_error_mu')
+        plt.legend()
+        plt.title('KKT error')
+        plt.show()
+
+        # dyn_error_hist = result['dyn_error_hist']
+        # dyn_error_hist = np.where(dyn_error_hist < 1e-20, np.nan, dyn_error_hist)
+        # plt.yscale('log')
+        # plt.plot(kkt_error_hist, label='kkt_error')
+        # plt.plot(dyn_error_hist, label='dyn_error')
+        # plt.legend()
+        # plt.title('dynamics feasibility error')
+        # plt.show()
+
+        gamma_hist = result['gamma_hist']
+        plt.plot(gamma_hist)
+        plt.title('gamma')
+        plt.show()
+
+        alpha_primal_hist = result['alpha_primal_hist']
+        alpha_dual_hist = result['alpha_dual_hist']
+        plt.plot(alpha_primal_hist, label='alpha_primal')
+        plt.plot(alpha_dual_hist, label='alpha_dual')
+        plt.legend()
+        plt.title('alpha')
+        plt.yscale('log')
+        plt.show()
+
+        alpha_s_max_hist = result['alpha_s_max_hist']
+        alpha_lams_max_hist = result['alpha_lams_max_hist']
+        plt.plot(alpha_s_max_hist, label='alpha_s_max')
+        plt.plot(alpha_lams_max_hist, label='alpha_lams_max')
+        plt.legend()
+        plt.title('maximum alpha')
+        plt.yscale('log')
+        plt.show()
+
+        mu_hist = result['mu_hist']
+        plt.yscale('log')
+        plt.plot(mu_hist)
+        plt.title('barrier parameter')
+        plt.show()
+
+        r_merit_hist = result['r_merit_hist']
+        plt.plot(r_merit_hist)
+        plt.title('penalty coefficient of merit function')
+        plt.show()
+
+        merit_hist = result['merit_hist']
+        plt.plot(merit_hist)
+        plt.title('merit function')
+        plt.show()
+
+        deriv_merit_hist = result['deriv_merit_hist']
+        plt.plot(-deriv_merit_hist)
+        plt.yscale('log')
+        plt.title('directional derivative of merit function')
+        plt.show()
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
@@ -313,8 +392,11 @@ class RiccatiRecursionSolver(SolverBase):
 
         # solve
         xs, us, ss, lamxs, lamss, ts, \
-        is_success, cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
-        gamma_hist, alpha_hist, mu_hist, r_merit_hist = self._solve(
+        is_success, \
+        cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,\
+        gamma_hist, \
+        alpha_primal_hist, alpha_dual_hist,alpha_s_max_hist, alpha_lams_max_hist,\
+        mu_hist, r_merit_hist, merit_hist, deriv_merit_hist = self._solve(
             f, fx, fu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             g, gx, gu,
@@ -348,9 +430,14 @@ class RiccatiRecursionSolver(SolverBase):
             self._result['kkt_error_mu_hist'] = kkt_error_mu_hist
             self._result['dyn_error_hist'] = dyn_error_hist
             self._result['gamma_hist'] = gamma_hist
-            self._result['alpha_hist'] = alpha_hist
+            self._result['alpha_primal_hist'] = alpha_primal_hist
+            self._result['alpha_dual_hist'] = alpha_dual_hist
+            self._result['alpha_s_max_hist'] = alpha_s_max_hist
+            self._result['alpha_lams_max_hist'] = alpha_lams_max_hist
             self._result['mu_hist'] = mu_hist
             self._result['r_merit_hist'] = r_merit_hist
+            self._result['merit_hist'] = merit_hist
+            self._result['deriv_merit_hist'] = deriv_merit_hist
             self._result['xs_opt'] = xs
             self._result['us_opt'] = us
             self._result['ss_opt'] = ss
@@ -393,6 +480,8 @@ class RiccatiRecursionSolver(SolverBase):
         gamma = gamma_init
         mu = mu_init
         r_merit = 1.0
+        merit = np.inf
+        deriv_merit = np.inf
 
         # check initial KKT error and cost
         kkt_error = eval_kkt_error(
@@ -426,9 +515,21 @@ class RiccatiRecursionSolver(SolverBase):
         gamma_hist = np.zeros(max_iters + 1, dtype=float)
         gamma_hist[0] = gamma
 
-        # alpha history
-        alpha_hist = np.zeros(max_iters + 1, dtype=float)
-        alpha_hist[0] = 0.0
+        # alpha_primal history
+        alpha_primal_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_primal_hist[0] = 0.0
+
+        # alpha_dual history
+        alpha_dual_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_dual_hist[0] = 0.0
+
+        # alpha_s_max history
+        alpha_s_max_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_s_max_hist[0] = 0.0
+
+        # alpha_s_max history
+        alpha_lams_max_hist = np.zeros(max_iters + 1, dtype=float)
+        alpha_lams_max_hist[0] = 0.0
 
         # mu (barrier parameter) history
         mu_hist = np.zeros(max_iters + 1, dtype=float)
@@ -437,6 +538,14 @@ class RiccatiRecursionSolver(SolverBase):
         # penalty coefficient of constraints violation in merit function
         r_merit_hist = np.zeros(max_iters + 1, dtype=float)
         r_merit_hist[0] = r_merit
+
+        # merit history
+        merit_hist = np.zeros(max_iters + 1, dtype=float)
+        merit_hist[0] = merit
+
+        # directional derivative of merit history
+        deriv_merit_hist = np.zeros(max_iters + 1, dtype=float)
+        deriv_merit_hist[0] = deriv_merit
 
         # success flag
         is_success = False
@@ -451,7 +560,7 @@ class RiccatiRecursionSolver(SolverBase):
             else:
                 if kkt_error < kkt_tol:
                     is_success = True
-            
+                        
             if iters > min_iters and is_success:
                 iters -= 1
                 break
@@ -490,7 +599,8 @@ class RiccatiRecursionSolver(SolverBase):
 
             # line search
             xs, us, ss, lamxs, lamss, cost, kkt_error, kkt_error_mu, \
-            alpha, alpha_dual, r_merit_new = line_search(
+            alpha_primal, alpha_dual, alpha_s_max, alpha_lams_max, \
+            r_merit, merit, deriv_merit = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, g, gx, gu, t0, x0, dt,
                     xs, us, ss, lamxs, lamss, dxs, dus, dss, dlamxs, dlamss, mu, 
                     alpha_min, r_alpha, enable_line_search,
@@ -502,7 +612,7 @@ class RiccatiRecursionSolver(SolverBase):
 
             # modify regularization coefficient
             if not fix_gamma:
-                if alpha < alpha_min:
+                if alpha_primal < alpha_min:
                     gamma /= r_gamma
                 else:
                     gamma *= r_gamma
@@ -511,10 +621,10 @@ class RiccatiRecursionSolver(SolverBase):
 
             # update barrier parameter
             if not fix_mu:
-                th = 10.0
+                th = 10
                 kkt_tol_mu = max(mu * th, kkt_tol - mu)
-                # kkt_tol_mu = mu
                 if kkt_error_mu < kkt_tol_mu and mu >= kkt_tol / 100:
+                # if abs(deriv_merit) < kkt_tol_mu and mu >= kkt_tol / 100:
                     mu *= r_mu
 
             # parameters' history
@@ -523,23 +633,36 @@ class RiccatiRecursionSolver(SolverBase):
             kkt_error_mu_hist[iters] = kkt_error_mu
             dyn_error_hist[iters] = dyn_error
             gamma_hist[iters] = gamma
-            alpha_hist[iters] = alpha
+            alpha_primal_hist[iters] = alpha_primal
+            alpha_dual_hist[iters] = alpha_dual
+            alpha_s_max_hist[iters] = alpha_s_max
+            alpha_lams_max_hist[iters] = alpha_lams_max
             mu_hist[iters] = mu
             r_merit_hist[iters] = r_merit
+            merit_hist[iters] = merit
+            deriv_merit_hist[iters] = deriv_merit
+
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
         kkt_error_mu_hist = kkt_error_mu_hist[0:iters + 1]
         dyn_error_hist = dyn_error_hist[0: iters + 1]
         gamma_hist = gamma_hist[0:iters + 1]
-        alpha_hist = alpha_hist[0:iters + 1]
+        alpha_primal_hist = alpha_primal_hist[0:iters + 1]
+        alpha_dual_hist = alpha_dual_hist[0:iters + 1]
+        alpha_s_max_hist = alpha_s_max_hist[0:iters + 1]
+        alpha_lams_max_hist = alpha_lams_max_hist[0:iters + 1]
         mu_hist = mu_hist[0: iters + 1]
         r_merit_hist = r_merit_hist[0: iters + 1]
+        merit_hist = merit_hist[0: iters + 1]
+        deriv_merit_hist = deriv_merit_hist[0: iters + 1]
 
         return (xs, us, ss, lamxs, lamss, ts, 
                 is_success,
                 cost_hist, kkt_error_hist, kkt_error_mu_hist, dyn_error_hist,
-                gamma_hist, alpha_hist, mu_hist, r_merit_hist)
+                gamma_hist, 
+                alpha_primal_hist, alpha_dual_hist, alpha_s_max_hist, alpha_lams_max_hist,
+                mu_hist, r_merit_hist, merit_hist, deriv_merit_hist)
 
 
 @numba.njit
@@ -896,7 +1019,8 @@ def line_search(
 
     return (xs_new, us_new, ss_new, lamxs_new, lamss_new,
             cost_new, kkt_error_new, kkt_error_mu_new,
-            alpha_primal, alpha_dual, r_merit)
+            alpha_primal, alpha_dual, alpha_s_max, alpha_lams_max,
+            r_merit, merit_new, deriv_merit)
 
 @numba.njit
 def eval_merit_and_derivative(
@@ -961,6 +1085,9 @@ def eval_merit_and_derivative(
 
     merit = merit_cost + r_merit * merit_constr
     deriv_merit = deriv_merit_cost + r_merit * deriv_merit_constr
+
+    # print("deriv_merit, merit")
+    # print(deriv_merit, merit)
 
     return merit, deriv_merit, r_merit
 
@@ -1047,6 +1174,9 @@ def eval_kkt_error(
     Lu_error = 0.0
     cmpl_error = 0.0
 
+    grad_lx_infty = 0.0
+    error_infty = 0.0
+
     # initial state
     res = x0 - xs[0]
     dyn_error += np.sum(np.abs(res) ** ord)
@@ -1087,11 +1217,23 @@ def eval_kkt_error(
         res = lams * s - mu1
         cmpl_error += np.sum(np.abs(res) ** ord)
 
+        grad_lx_infty = max(grad_lx_infty, max(np.abs(lx(x, u, t) * dt) ** ord))
+        error_infty = max(error_infty, max(np.abs(-lamx + lamx1 + Hx * dt + gx(x, u, t).T @ lams) ** ord))
+
     # Lx[N]
     res = lfx(xs[N], t0 + N * dt) - lamxs[N]
     Lx_error += np.sum(np.abs(res) ** ord)
 
     kkt_error = dyn_error + ineq_error + Lx_error + Lu_error + cmpl_error
+
+    # grad_lx_infty = max(grad_lx_infty, max(np.abs(lfx(xs[N], t0 + N*dt)) ** ord))
+    # error_infty = max(error_infty, max(np.abs(lfx(xs[N], t0 + N * dt) - lamxs[N]) ** ord))
+
+    # print("kkt_error, Lx_error, Lu_error, cmpl_error, dyn_error, ineq_error")
+    # print(kkt_error, Lx_error, Lu_error, cmpl_error, dyn_error, ineq_error)
+    # print("grad_lx_infty, Lx_error, error_infty")
+    # print(grad_lx_infty, Lx_error, error_infty)
+    # print()
 
     return kkt_error ** (1.0 / ord)
 

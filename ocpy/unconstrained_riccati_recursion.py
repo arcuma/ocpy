@@ -3,6 +3,7 @@ import numpy as np
 import numba
 import abc
 import time
+import matplotlib.pyplot as plt
 
 from ocpy import symutils
 from ocpy.ocp import OCP
@@ -43,6 +44,8 @@ class UCRRSolver(SolverBase):
         self._result['gamma_hist'] = None
         self._result['alpha_hist'] = None
         self._result['r_merit_hist'] = None
+        self._result['merit_hist'] = None
+        self._result['deriv_merit_hist'] = None
         self._result['xs_opt'] = np.ndarray(0)
         self._result['us_opt'] = np.ndarray(0)
         self._result['lamxs_opt'] = np.ndarray(0)
@@ -146,6 +149,57 @@ class UCRRSolver(SolverBase):
                           cost_hist, kkt_error_hist)
         plotter.plot(save=save)
 
+    def plot_detail(self):
+        """ plot result of some parameters.
+        """
+        result = self.get_result()
+
+        gamma_hist = result['gamma_hist']
+        plt.plot(gamma_hist)
+        plt.title('gamma')
+        plt.show()
+
+        alpha_hist = result['alpha_hist']
+        plt.plot(alpha_hist)
+        plt.title('alpha')
+        plt.show()
+
+        cost_hist = result['cost_hist']
+        plt.plot(cost_hist)
+        plt.title('cost')
+        plt.show()
+
+        kkt_error_hist = result['kkt_error_hist']
+        plt.yscale('log')
+        plt.plot(kkt_error_hist)
+        plt.title('KKT error')
+        plt.show()
+
+        dyn_error_hist = result['dyn_error_hist']
+        dyn_error_hist = np.where(dyn_error_hist < 1e-20, np.nan, dyn_error_hist)
+        plt.yscale('log')
+        plt.plot(kkt_error_hist, label='kkt_error')
+        plt.plot(dyn_error_hist, label='dyn_error')
+        plt.legend()
+        plt.title('dynamics feasibility error')
+        plt.show()
+
+        r_merit_hist = result['r_merit_hist']
+        plt.plot(r_merit_hist)
+        plt.title('penalty coefficient of merit function')
+        plt.show()
+
+        merit_hist = result['merit_hist']
+        plt.plot(merit_hist)
+        plt.title('merit function')
+        plt.show()
+
+        deriv_merit_hist = result['deriv_merit_hist']
+        plt.plot(-deriv_merit_hist)
+        plt.yscale('log')
+        plt.title('directional derivative of merit function')
+        plt.show()
+
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
         """
@@ -204,7 +258,8 @@ class UCRRSolver(SolverBase):
         # solve
         xs, us, lamxs, ts, \
         is_success, cost_hist, kkt_error_hist, dyn_error_hist,\
-        gamma_hist, alpha_hist, r_merit_hist = self._solve(
+        gamma_hist, alpha_hist, \
+        r_merit_hist, merit_hist, deriv_merit_hist = self._solve(
             f, fx, fu,
             l, lx, lu, lxx, lux, luu, lf, lfx, lfxx,
             self._t0, self._x0, self._T, self._N, 
@@ -235,6 +290,8 @@ class UCRRSolver(SolverBase):
             self._result['gamma_hist'] = gamma_hist
             self._result['alpha_hist'] = alpha_hist
             self._result['r_merit_hist'] = r_merit_hist
+            self._result['merit_hist'] = merit_hist
+            self._result['deriv_merit_hist'] = deriv_merit_hist
             self._result['xs_opt'] = xs
             self._result['us_opt'] = us
             self._result['lamxs_opt'] = lamxs
@@ -273,6 +330,8 @@ class UCRRSolver(SolverBase):
 
         gamma = gamma_init
         r_merit = 1.0
+        merit = np.inf
+        deriv_merit = np.inf
 
         # check initial KKT error and cost
         kkt_error = eval_kkt_error(f, fx, fu, lx, lu, lfx, 
@@ -300,8 +359,17 @@ class UCRRSolver(SolverBase):
         alpha_hist = np.zeros(max_iters + 1, dtype=float)
         alpha_hist[0] = 0.0
 
+        # penalty coefficient of constraints violation in merit function
         r_merit_hist = np.zeros(max_iters + 1, dtype=float)
         r_merit_hist[0] = 0.0
+
+        # merit history
+        merit_hist = np.zeros(max_iters + 1, dtype=float)
+        merit_hist[0] = merit
+
+        # directional derivative of merit history
+        deriv_merit_hist = np.zeros(max_iters + 1, dtype=float)
+        deriv_merit_hist[0] = deriv_merit
 
         # success flag
         is_success = False
@@ -336,8 +404,8 @@ class UCRRSolver(SolverBase):
             )
 
             # line search
-            xs_new, us_new, lamxs_new, cost_new, kkt_error_new, alpha, r_merit_new \
-                = line_search(
+            xs, us, lamxs, cost, kkt_error, alpha, \
+            r_merit, merit, deriv_merit = line_search(
                     f, fx, fu, l, lx, lu, lf, lfx, t0, x0, dt,
                     xs, us, lamxs, dxs, dus, dlamxs,
                     alpha_min, r_alpha, enable_line_search,
@@ -356,23 +424,14 @@ class UCRRSolver(SolverBase):
                 # clip gamma
                 gamma = min(max(gamma, gamma_min), gamma_max)
 
-            # update variables.
-            xs = xs_new
-            us = us_new
-            lamxs = lamxs_new
-
-            kkt_error = kkt_error_new
-            cost = cost_new
-            r_merit = r_merit_new
-
             cost_hist[iters] = cost
             kkt_error_hist[iters] = kkt_error
             dyn_error_hist[iters] = dyn_error
             gamma_hist[iters] = gamma
             alpha_hist[iters] = alpha
             r_merit_hist[iters] = r_merit
-        else:
-            is_success = False
+            merit_hist[iters] = merit
+            deriv_merit_hist[iters] = deriv_merit
         
         cost_hist = cost_hist[0:iters + 1]
         kkt_error_hist = kkt_error_hist[0:iters + 1]
@@ -380,10 +439,13 @@ class UCRRSolver(SolverBase):
         gamma_hist = gamma_hist[0:iters + 1]
         alpha_hist = alpha_hist[0:iters + 1]
         r_merit_hist = r_merit_hist[0:iters + 1]
+        merit_hist = merit_hist[0: iters + 1]
+        deriv_merit_hist = deriv_merit_hist[0: iters + 1]
 
         return (xs, us, lamxs, ts, 
                 is_success, cost_hist, kkt_error_hist, dyn_error_hist,
-                gamma_hist, alpha_hist, r_merit_hist)
+                gamma_hist, alpha_hist,
+                r_merit_hist, merit_hist, deriv_merit_hist)
 
 
 @numba.njit
@@ -580,7 +642,10 @@ def line_search(
         # update alpha
         alpha *= r_alpha
     
-    return xs_new, us_new, lamxs_new, cost_new, kkt_error_new, alpha, r_merit
+    return (xs_new, us_new, lamxs_new, \
+            cost_new, kkt_error_new, 
+            alpha, 
+            r_merit, merit_new, deriv_merit)
 
 
 @numba.njit

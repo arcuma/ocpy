@@ -2,7 +2,7 @@ import sympy as sym
 import numpy as np
 import numba
 import time
-from os.path import join, abspath, dirname
+import matplotlib.pyplot as plt
 
 from ocpy import symutils
 from ocpy.ocp import OCP
@@ -113,6 +113,27 @@ class DDPSolver(SolverBase):
         plotter = Plotter(self._log_dir, self._xs_opt, self._us_opt, self._ts,
                           self._result['cost_hist'])
         plotter.plot(save=save)
+
+    def plot_detail(self):
+        """ plot result of some parameters.
+        """
+        result = self.get_result()
+
+        gamma_hist = result['gamma_hist']
+        plt.plot(gamma_hist)
+        plt.title('gamma')
+        plt.show()
+
+        alpha_hist = result['alpha_hist']
+        plt.plot(alpha_hist)
+        plt.title('alpha')
+        plt.show()
+        print('average alpha:',sum(alpha_hist / (len(alpha_hist) - 1)))
+
+        cost_hist = result['cost_hist']
+        plt.plot(cost_hist)
+        plt.title('cost')
+        plt.show()
 
     def init_solver(self):
         """ Initialize solver. Call once before you first call solve().
